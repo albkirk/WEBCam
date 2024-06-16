@@ -21,6 +21,7 @@ static long TIMER_Current = 0;
 unsigned long COUNTER = 0;
 float Batt_Level = 0;
 float Batt_Last  = 0;
+bool CPU_High = false;                      // System flag indicating being busy executing any CPU intensive task, such capture VIDEO
 
 
 void blink_LED(unsigned int slot, int bl_LED = LED_ESP, bool LED_OFF = !config.LED) { // slot range 1 to 10 =>> 3000/300

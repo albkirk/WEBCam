@@ -21,10 +21,15 @@ void custom_mqtt(String command, String cmd_value) {
 
 //  if ( command == "send_Telemetry" && bool(cmd_value.toInt())) { gps_update(); print_gps_data(); send_Telemetry(); }
 
+    if ( command == "Light") { Light = bool(cmd_value.toInt());}
+    if ( command == "OnAir") { OnAir = bool(cmd_value.toInt());}
+
 }
 
 void custom_update(){
-    yield();
+    //yield();
     //ambient_data();
     //mqtt_dump_data(mqtt_pathtele, "Telemetry");
+    mqtt_publish(mqtt_pathtele, "Light", String(Light));
+    mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
 }

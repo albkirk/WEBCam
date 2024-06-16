@@ -3,12 +3,14 @@
 // NOTE! entity and device_class must be lowecased, except "None"
 
 void custo_hassio_disc(){
+    config_entity("light","None","Light");
 //    config_entity("switch","switch","Switch");
 //    config_entity("sensor","none","Timer");
 //    config_trigger("Button_1");
 }
 
 void custo_hassio_del(){
+    delete_entity("light","None","Light");
 //    delete_entity("switch","switch","Switch");
 //    delete_entity("sensor","none","Timer");
 //    delete_trigger("Button_1");

@@ -1,5 +1,7 @@
 #include <ArduinoOTA.h>
 
+bool OTA_BUSY = false;            // To flag that is performing OTA
+
 
   void ota_setup() {
     if(config.OTA) {
@@ -18,6 +20,8 @@
 
         ArduinoOTA.onStart([]() { // what to do before OTA download insert code here
           String type;
+          OTA_BUSY = true;            // To flag that is performing OTA
+          Serial.println("Getting BUSY on OTA...");
           if (ArduinoOTA.getCommand() == U_FLASH)
             type = "sketch";
           else // U_SPIFFS

@@ -4,23 +4,23 @@
 //#define ESP8285                                         // ESP8285 chip requires reduced MEM space (ex.: remove WEB page)  
 #undef ESP8266                                          // To make sure it is not used somewhere... 
 //#undef ESP32                                            // To make sure it is not used somewhere... 
-#define ESP32C3                                           // ESP32-C3 chip has no ULP.
+//#define ESP32C3                                           // ESP32-C3 chip has no ULP.
 
 // -- HARWARE & SOFTWARE Version --
 #define BRANDName           "AlBros_Team"                 // Hardware brand name
-#define MODELName           "GenBoxESP"                   // Hardware model name
-#define SWVer               "13.12"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
+#define MODELName           "WEBCam"                      // Hardware model name
+#define SWVer               "01.01"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
 
 // -- Model Variants Definition --                        // Identify variants for acomodade small code changes 
 //#define ModelVariant                                    // Ex.: MoesHouse cover, Ambisense version,... 
 
 // -- DIGITAL GPIO to Function Assignment --
-#define LED_ESP              8                            // 8266=2, ESP32=22, ESP32C3=8, T-Call=13, TTGoTS=22, T5=19, -1 means NOT used!
+#define LED_ESP             33                            // 8266=2, ESP32=22, ESP32C3=8, T-Call=13, TTGoTS=22, T5=19, -1 means NOT used!
 #define IR_PIN              -1                            // IR-LED Receiver PIN  -1 means NOT used!
 #define BUZZER              -1                            // (Active) Buzzer pin. Suggest to use pin 0. -1 means NOT used!
 #define Ext1WakeUP          -1                            // External Wake Up pin. (connected to GND, with Parallel Cap).  -1 means NOT used!
 #define Reset_Btn           -1                            // Reset button to return to default configuration. -1 means NOT used! 
-#define BUT_A                9                            // Button A INPUT pin (used in buttons.h) TTGoTS=35, T5=39, TTGo T7=0
+#define BUT_A               -1                            // Button A INPUT pin (used in buttons.h) TTGoTS=35, T5=39, TTGo T7=0
 #define BUT_B               -1                            // Button B INPUT pin (used in buttons.h) TTGoTS=34,
 #define BUT_C               -1                            // Button C INPUT pin (used in buttons.h) TTGoTS=39,
 #define T_Left              -1                            // Touch button Left  pin. TTGoTS=T7, T5=-1, -1 means NOT used!
@@ -35,12 +35,12 @@
 #define PIN_RED             -1                            // PWM Output PIN for RED  -1 means NOT used!
 #define PIN_GREEN           -1                            // PWM Output PIN for GRREN  -1 means NOT used!
 #define PIN_BLUE            -1                            // PWM Output PIN for BLUE  -1 means NOT used!
-#define NEOPixelsPIN        -1                            // GPIO pin where the NeoPixels is connected.
+#define NEOPixelsPIN        -1                            // NeoPixels DATA GPIO pin.
 #define NEOPixelsNUM        -1                            // Number of NeoPixels LEDs attached
 
 // -- Power Source & Battery Level --
-bool BattPowered =       true;                            // Is the device battery powered?
-#define Res_Div           true                            // Do you have a Resistor divider (ence needs to multiply by 2)?
+bool BattPowered =       false;                           // Is the device battery powered?
+#define Res_Div          false                            // Do you have a Resistor divider (ence needs to multiply by 2)?
 #define Batt_L_Thrs         15                            // Battery level threshold [0%-100%] (before slepping forever).
 #define Using_ADC         true                            // ESP8266 only. Will you use the ADC? (if not, it will measure the internal voltage)
 //#define IP5306                                          // Power Management chip. TTGo T-Call module uses this.
@@ -107,7 +107,7 @@ void config_defaults() {
     config.LED = true;                                    // 0 - OFF, 1 - ON
     config.TELNET = true;                                 // 0 - Disabled, 1 - Enabled
     config.OTA = true;                                    // 0 - Disabled, 1 - Enabled
-    config.WEB = true;                                    // 0 - Disabled, 1 - Enabled
+    config.WEB = false;                                   // 0 - Disabled, 1 - Enabled
     config.Remote_Allow = true;                           // 0 - Not Allow, 1 - Allow remote operation
     config.STAMode = true;                                // 0 - AP or AP+STA Mode, 1 - Station only Mode
     config.APMode = true;                                 // 0 - AP Mode Disabled, 1 - AP Mode Enabled

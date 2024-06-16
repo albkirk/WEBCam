@@ -231,48 +231,24 @@ void config_entity(String entity, String device_class, String param = "", String
         discovery_doc["pl_off"]         = "0";                                      // Payload_off
         discovery_doc["pl_on"]          = "1";                                      // Payload_on
         discovery_doc["cmd_t"]          = "~/command/Light";                        // command_topic
-        discovery_doc["rgb_stat_t"]     = "~/inform/Color";                         // rgb_state_topic
-        discovery_doc["rgb_cmd_t"]      = "~/command/Color";                        // rgb_command_topic
-        discovery_doc["rgb_val_tpl"]    = "{{(int(value[1:3], base=16), int(value[3:5],base=16), int(value[5:7],base=16)) | join(',')}}";   // rgb_value_template
-        discovery_doc["bri_stat_t"]     = "~/inform/Gain";                          // brightness_state_topic
-        discovery_doc["bri_cmd_t"]      = "~/command/Gain";                         // brightness_command_topic
-        discovery_doc["fx_stat_t"]      = "~/inform/EFX";                           // effect_state_topic
-        discovery_doc["fx_cmd_t"]       = "~/command/EFX";                          // effect_command_topic
-        JsonArray effects = discovery_doc.createNestedArray("fx_list");
-            effects.add("NoEFX");
-            effects.add("Auto");
-            effects.add("Flash");
-            effects.add("Fade3");
-            effects.add("Fade7");
-            effects.add("scan");
-            effects.add("Rainbow");
-        //discovery_doc["fx_list"]        = "['NoEFX','Auto','Flash','Fade3','Fade7','scan','Raibow']"; // effect_list
-        //discovery_doc["fx_list_tpl"]    = "{{ value | list }}";                     //effect_value_template
-        //effect_command_topic
-        // state_topic: "office/rgb1/light/status"
-        // command_topic: "office/rgb1/light/switch"
-        // brightness_state_topic: "office/rgb1/brightness/status"
-        // brightness_command_topic: "office/rgb1/brightness/set"
-        // rgb_state_topic: "office/rgb1/rgb/status"
-        // rgb_command_topic: "office/rgb1/rgb/set"
-        // state_value_template: "{{ value_json.state }}"
-        // brightness_value_template: "{{ value_json.brightness }}"
-        // rgb_value_template: "{{ value_json.rgb | join(',') }}"
-
+        if(device == "RGB") {
+            discovery_doc["rgb_stat_t"]     = "~/inform/Color";                         // rgb_state_topic
+            discovery_doc["rgb_cmd_t"]      = "~/command/Color";                        // rgb_command_topic
+            discovery_doc["rgb_val_tpl"]    = "{{(int(value[1:3], base=16), int(value[3:5],base=16), int(value[5:7],base=16)) | join(',')}}";   // rgb_value_template
+            discovery_doc["bri_stat_t"]     = "~/inform/Gain";                          // brightness_state_topic
+            discovery_doc["bri_cmd_t"]      = "~/command/Gain";                         // brightness_command_topic
+            discovery_doc["fx_stat_t"]      = "~/inform/EFX";                           // effect_state_topic
+            discovery_doc["fx_cmd_t"]       = "~/command/EFX";                          // effect_command_topic
+            JsonArray effects = discovery_doc.createNestedArray("fx_list");
+                effects.add("NoEFX");
+                effects.add("Auto");
+                effects.add("Flash");
+                effects.add("Fade3");
+                effects.add("Fade7");
+                effects.add("scan");
+                effects.add("Rainbow");
+        }
     }
-/*
-'rgb_cmd_t':           'rgb_command_topic',
-'rgb_cmd_tpl':         'rgb_command_template',
-'rgb_stat_t':          'rgb_state_topic',
-'rgb_val_tpl':         'rgb_value_template',
-'bri_cmd_t':           'brightness_command_topic',
-'bri_cmd_tpl':         'brightness_command_template',
-'bri_scl':             'brightness_scale',
-'bri_stat_t':          'brightness_state_topic',
-'bri_tpl':             'brightness_template',
-'bri_val_tpl':         'brightness_value_template',
-*/
-
 
 
     serializeJson(discovery_doc, discovery_jsonString);                     //Serialize JSON data to string
