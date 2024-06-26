@@ -9,7 +9,7 @@
 // -- HARWARE & SOFTWARE Version --
 #define BRANDName           "AlBros_Team"                 // Hardware brand name
 #define MODELName           "WEBCam"                      // Hardware model name
-#define SWVer               "01.01"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
+#define SWVer               "01.02"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
 
 // -- Model Variants Definition --                        // Identify variants for acomodade small code changes 
 //#define ModelVariant                                    // Ex.: MoesHouse cover, Ambisense version,... 
@@ -59,6 +59,11 @@ bool BattPowered =       false;                           // Is the device batte
 // -- I2C PIN Definition --
 #define SDAPIN              -1                            // 8266=4, ESP32=21, -1 means NO SDA used!
 #define SCKPIN              -1                            // 8266=5, ESP32=22, -1 means NO SCK used!
+
+// -- I2S PIN Definition --
+#define I2S_WS               2                            // Microphone WS PIN
+#define I2S_SCK             14                            // Microphone SCK PIN
+#define I2S_SD              15                            // Microphone SD PIN
 
 // -- DHT Definition --
 #define DHTTYPE              2                            // use 1 for "DHT11", 2 for "DHT22", or 3 for "AM2320" to select the DHT Model

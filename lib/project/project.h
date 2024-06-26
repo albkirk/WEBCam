@@ -7,31 +7,28 @@
 #include "soc/soc.h"            //disable brownout problems
 #include "soc/rtc_cntl_reg.h"   //disable brownout problems
 #include "esp_http_server.h"
+#include "microphone.h"
 
 // **** Project code definition here ...
-#define PART_BOUNDARY "123456789000000000000987654321"
-#define CAMERA_MODEL_AI_THINKER
-#if defined(CAMERA_MODEL_AI_THINKER)
-  #define PWDN_GPIO_NUM     32
-  #define RESET_GPIO_NUM    -1
-  #define XCLK_GPIO_NUM      0
-  #define SIOD_GPIO_NUM     26
-  #define SIOC_GPIO_NUM     27
-  #define Y9_GPIO_NUM       35
-  #define Y8_GPIO_NUM       34
-  #define Y7_GPIO_NUM       39
-  #define Y6_GPIO_NUM       36
-  #define Y5_GPIO_NUM       21
-  #define Y4_GPIO_NUM       19
-  #define Y3_GPIO_NUM       18
-  #define Y2_GPIO_NUM        5
-  #define VSYNC_GPIO_NUM    25
-  #define HREF_GPIO_NUM     23
-  #define PCLK_GPIO_NUM     22
-#else
-  #error "Camera model not selected"
-#endif
+// Camera PINs
+#define PWDN_GPIO_NUM     32
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
 
+// Camera Capture configuration 
 #define RESOLUTION           8          // Duty cycle bits (8 -> 255) equalto FF
 #define PWM_FREQ          1000          // PWM Frequency
 #define CHANNELLED           1          // LED Channel to control the Light (Big White LED)
@@ -39,10 +36,11 @@
 bool Light = false;                     // [OFF / ON] Light switch
 bool Light_Last = false;                // [OFF / ON] Light switch  (Last state)
 
-bool OnAir = true;                     // OnAir switch
-bool OnAir_Last = false;               // OnAir switch  (Last state)
+static bool OnAir = true;               // OnAir switch
+static bool OnAir_Last = false;         // OnAir switch  (Last state)
 
-
+// HTTP pre-defined strings
+#define PART_BOUNDARY "123456789000000000000987654321"
 static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
@@ -50,6 +48,8 @@ static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %
 httpd_handle_t stream_httpd = NULL;
 
 // **** Project code functions here ...
+
+// to Handle the VIDEO STREAM
 static esp_err_t stream_handler(httpd_req_t *req){
   camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
@@ -62,10 +62,10 @@ static esp_err_t stream_handler(httpd_req_t *req){
     return res;
   }
 
-  while(true){
+  while(OnAir){
     fb = esp_camera_fb_get();
     if (!fb) {
-      Serial.println("Camera capture failed");
+      telnet_println("Camera capture failed");
       res = ESP_FAIL;
     } else {
       if(fb->width > 400){
@@ -74,7 +74,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
           esp_camera_fb_return(fb);
           fb = NULL;
           if(!jpeg_converted){
-            Serial.println("JPEG compression failed");
+            telnet_println("JPEG compression failed");
             res = ESP_FAIL;
           }
         } else {
@@ -106,6 +106,10 @@ static esp_err_t stream_handler(httpd_req_t *req){
     }
     //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
   }
+  if(!OnAir) {
+    telnet_println("Stop capturing video");
+    res = ESP_ERR_TIMEOUT;
+  }
   return res;
 }
 
@@ -122,9 +126,55 @@ void startCameraServer(){
   
   //Serial.printf("Starting web server on port: '%d'\n", config.server_port);
   if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-    httpd_register_uri_handler(stream_httpd, &index_uri);
+      httpd_register_uri_handler(stream_httpd, &index_uri);
+      telnet_println("Camera Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(config.server_port));
   }
 }
+
+/*
+// To handle the AUDIO STREAM
+void handleAudioStream() {
+
+  mic_i2s_init();
+
+  WAVHeader wavHeader;
+  initializeWAVHeader(wavHeader, sampleRate, bitsPerSample, numChannels);
+
+  // Get access to the client object
+  WiFiClient Audioclient = Audioserver.client();
+
+  // Send the 200 OK response with the headers
+  Audioclient.print("HTTP/1.1 200 OK\r\n");
+  Audioclient.print("Content-Type: audio/wav\r\n");
+  Audioclient.print("Access-Control-Allow-Origin: *\r\n");
+  Audioclient.print("\r\n");
+
+  // Send the initial part of the WAV header
+  Audioclient.write(reinterpret_cast<const uint8_t*>(&wavHeader), sizeof(wavHeader));
+
+  uint8_t buffer[bufferSize];
+  size_t bytesRead = 0;
+  //uint32_t totalDataSize = 0; // Total size of audio data sent
+
+  while (true) {
+    if (!Audioclient.connected()) {
+      //i2s_driver_uninstall(I2S_PORT);
+      Serial.println("Audioclient disconnected");
+      break;
+    }
+    // Read audio data from I2S DMA
+    i2s_read(I2S_PORT, buffer, bufferSize, &bytesRead, portMAX_DELAY);
+
+    // Send audio data
+    if (bytesRead > 0) {
+      Audioclient.write(buffer, bytesRead);
+      //totalDataSize += bytesRead;
+      //Serial.println(totalDataSize);
+    }
+  }
+}
+*/
+
 
 
 void project_setup() {
@@ -174,15 +224,14 @@ void project_setup() {
     config.fb_count = 1;
   }
   
-  // Camera init
+  // Camera initialization
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
 
-  telnet_print("Camera Stream Ready! Go to: http://");
-  telnet_println(WiFi.localIP().toString());
+
   
   // Start streaming web server
   //startCameraServer();
@@ -198,12 +247,9 @@ void project_loop() {
 
   if(OnAir != OnAir_Last) {
       if(OnAir) startCameraServer();
-      else {
-          Serial.print("Unregistering:...");
-          Serial.println(httpd_unregister_uri_handler(stream_httpd, "/", HTTP_GET));
-          Serial.println(httpd_stop(stream_httpd));
-      }
+      else telnet_println("Stopped HTTP stream with error: " + String(httpd_stop(stream_httpd)) );
       mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
+      Light = false;
       OnAir_Last = OnAir;
   }
 
