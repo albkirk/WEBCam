@@ -7,6 +7,7 @@
 #include "soc/soc.h"            //disable brownout problems
 #include "soc/rtc_cntl_reg.h"   //disable brownout problems
 #include "esp_http_server.h"
+#include "sys/socket.h"
 #include "microphone.h"
 
 // **** Project code definition here ...
@@ -28,71 +29,152 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// Camera Capture configuration 
+// LED, PWM and others configuration 
 #define RESOLUTION           8          // Duty cycle bits (8 -> 255) equalto FF
 #define PWM_FREQ          1000          // PWM Frequency
 #define CHANNELLED           1          // LED Channel to control the Light (Big White LED)
 #define Big_LED_Pin          4
-bool Light = false;                     // [OFF / ON] Light switch
-bool Light_Last = false;                // [OFF / ON] Light switch  (Last state)
 
-static bool OnAir = true;               // OnAir switch
+int Framerate =              8;         // Frame Rate Capture
+bool Light =             false;         // [OFF / ON] Light switch
+bool Light_Last =        false;         // [OFF / ON] Light switch  (Last state)
+
+static bool OnAir =      false;         // OnAir switch
 static bool OnAir_Last = false;         // OnAir switch  (Last state)
+static bool Stream_VIDEO=false;         // Streaming Video
+static bool Stream_AUDIO=false;         // Streaming Audio
+
 
 // HTTP pre-defined strings
 #define PART_BOUNDARY "123456789000000000000987654321"
-static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+static const char* _STREAM_PART = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
-static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+static const char* _CONTENT_TYPE_JPEG = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+static const char* _CONTENT_TYPE_AUDIO = "Content-Type: audio/wav\r\n";
+static const char* _ACCESS_CONTROL = "Access-Control-Allow-Origin: *\r\n";
 
-httpd_handle_t stream_httpd = NULL;
+httpd_handle_t camera_httpd = NULL;
+httpd_handle_t microphone_httpd = NULL;
+
+typedef struct
+{
+    httpd_req_t *req;
+    size_t len;
+} jpg_chunking_t;
+
+static camera_config_t cam_config;
+
 
 // **** Project code functions here ...
+// Function to get the Client's IP address
+void print_client_ip(httpd_req_t *req)
+{
+    int sockfd = httpd_req_to_sockfd(req);
+    char ipstr[INET6_ADDRSTRLEN];
+    struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
+    socklen_t addr_size = sizeof(addr);
+    
+    if (getpeername(sockfd, (struct sockaddr *)&addr, &addr_size) < 0) {
+        //ESP_LOGE(TAG, "Error getting client IP");
+        telnet_println("Error getting client IP");
+        return;
+    }
+    
+    // Convert to IPv6 string
+    //inet_ntop(AF_INET, &addr.sin6_addr, ipstr, sizeof(ipstr));
+    //ESP_LOGI(TAG, "Client IP => %s", ipstr);
 
-// to Handle the VIDEO STREAM
-static esp_err_t stream_handler(httpd_req_t *req){
+    // Convert to IPv4 string
+    inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr[3], ipstr, sizeof(ipstr));
+    //ESP_LOGI(TAG, "Client IP => %s", ipstr);
+    telnet_println("Client IP: " + String(ipstr));
+
+}
+
+
+// Function that Handles the VIDEO STREAM
+static esp_err_t video_stream_handler(httpd_req_t *req){
   camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
   uint8_t * _jpg_buf = NULL;
   char * part_buf[64];
+  unsigned long Last_fb_capture = micros();
+  Stream_VIDEO = true;
+  CPU_Boost(true);
+  int current_FR = Framerate;
+  if (getRSSI()<-85) current_FR = int(Framerate / 4);
+  else if (getRSSI()<-75) current_FR = int(Framerate / 2);
+  else current_FR = Framerate;
 
-  res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+  res = httpd_resp_set_type(req, _STREAM_PART);
   if(res != ESP_OK){
     return res;
   }
 
+  telnet_print("NEW HTTP GET request for VIDEO Stream from ");
+  print_client_ip(req);
+
+  // Set "no-cache" on Cache-Control header
+  res = httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  if (res != ESP_OK) {
+    return res;
+  }
+
+  // Set the Access-Control-Allow-Origin header
+  res = httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  if (res != ESP_OK) {
+    return res;
+  }
+  /*
+  char FRate[String(current_FR).length()];
+  strcpy(FRate, String(current_FR).c_str());
+  httpd_resp_set_hdr(req, "X-Framerate", FRate);
+  */
+  //httpd_resp_set_hdr(req, "X-Framerate", "");
+
   while(OnAir){
+    if (micros() - Last_fb_capture < 1000000/current_FR) delayMicroseconds(1000000/current_FR - (micros() - Last_fb_capture) - 10);
+    else telnet_println("FrameRate: " + String(current_FR) + " - Late Camera capture: " + String(micros() - Last_fb_capture));
     fb = esp_camera_fb_get();
+    Last_fb_capture = micros();
     if (!fb) {
-      telnet_println("Camera capture failed");
-      res = ESP_FAIL;
+      telnet_println("Camera capture failed!");
+      esp_camera_return_all();
+      fb = NULL;
+      if(_jpg_buf) free(_jpg_buf);
+      _jpg_buf = NULL;
+      OnAir_Last = false;         // force to init the Camera  
+      res = ESP_ERR_INVALID_RESPONSE;
     } else {
+      res = ESP_OK;
       if(fb->width > 400){
         if(fb->format != PIXFORMAT_JPEG){
-          bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-          esp_camera_fb_return(fb);
-          fb = NULL;
-          if(!jpeg_converted){
-            telnet_println("JPEG compression failed");
-            res = ESP_FAIL;
-          }
+            bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+            esp_camera_fb_return(fb);
+            fb = NULL;
+            if(!jpeg_converted){
+                telnet_println("JPEG compression failed");
+                res = ESP_ERR_INVALID_RESPONSE;
+            }
         } else {
-          _jpg_buf_len = fb->len;
-          _jpg_buf = fb->buf;
+            _jpg_buf_len = fb->len;
+            _jpg_buf = fb->buf;
         }
       }
     }
+    if(WIFI_state != WL_CONNECTED) res = ESP_ERR_WIFI_BASE; 
     if(res == ESP_OK){
-      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
+      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+    }
+    if(res == ESP_OK){
+      size_t hlen = snprintf((char *)part_buf, 64, _CONTENT_TYPE_JPEG, _jpg_buf_len);
       res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
     }
     if(res == ESP_OK){
       res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
     }
-    if(res == ESP_OK){
-      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
-    }
+
     if(fb){
       esp_camera_fb_return(fb);
       fb = NULL;
@@ -101,8 +183,16 @@ static esp_err_t stream_handler(httpd_req_t *req){
       free(_jpg_buf);
       _jpg_buf = NULL;
     }
-    if(res != ESP_OK){
+
+    if (httpd_req_to_sockfd(req) == -1) {
+      telnet_println("VIDEO client disconnected");
+      res = ESP_ERR_NOT_FINISHED;
+    }
+
+    if(res != ESP_OK ){
+      telnet_println("VIDEO RES msg: " + String(esp_err_to_name(res)));
       break;
+
     }
     //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
   }
@@ -110,78 +200,309 @@ static esp_err_t stream_handler(httpd_req_t *req){
     telnet_println("Stop capturing video");
     res = ESP_ERR_TIMEOUT;
   }
+  if(!OnAir_Last) {
+    telnet_println("taking a break to cooldown...");
+    delay(250);
+  }
+  esp_camera_return_all();
+  fb = NULL;
+  telnet_println("Finish VIDEO Stream HTTP GET request");
+  Stream_VIDEO = false;
+  if(!Stream_AUDIO) CPU_Boost(false);
   return res;
 }
 
-void startCameraServer(){
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 2180;
 
-  httpd_uri_t index_uri = {
-    .uri       = "/",
-    .method    = HTTP_GET,
-    .handler   = stream_handler,
-    .user_ctx  = NULL
-  };
-  
-  //Serial.printf("Starting web server on port: '%d'\n", config.server_port);
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-      httpd_register_uri_handler(stream_httpd, &index_uri);
-      telnet_println("Camera Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(config.server_port));
-  }
+// Functions To handle CAPTURE of one JPEG Image
+// the Aux function first...
+static size_t jpg_encode_stream(void *arg, size_t index, const void *data, size_t len)
+{
+    jpg_chunking_t *j = (jpg_chunking_t *)arg;
+    if (!index)
+    {
+        j->len = 0;
+    }
+    if (httpd_resp_send_chunk(j->req, (const char *)data, len) != ESP_OK)
+    {
+        return 0;
+    }
+    j->len += len;
+    return len;
 }
 
-/*
-// To handle the AUDIO STREAM
-void handleAudioStream() {
+ // ... and main function
+static esp_err_t capture_handler(httpd_req_t *req)
+{
+    camera_fb_t *fb = NULL;
+    esp_err_t res = ESP_OK;
 
+    telnet_print("NEW HTTP GET request for Camera CAPTURE from ");
+    print_client_ip(req);
+
+    esp_camera_return_all();
+    for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
+        fb = esp_camera_fb_get();
+        esp_camera_fb_return(fb);
+    }
+    fb = esp_camera_fb_get();         // so this captures the image at the moment you click
+
+    if (!fb)
+    {
+        telnet_println("Camera capture failed - returning Error 500");
+        httpd_resp_send_500(req);
+        esp_camera_return_all();
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "image/jpeg");
+    httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+    char ts[32];
+    snprintf(ts, 32, "%ld.%06ld", fb->timestamp.tv_sec, fb->timestamp.tv_usec);
+    httpd_resp_set_hdr(req, "X-Timestamp", (const char *)ts);
+
+    if (fb->format == PIXFORMAT_JPEG) {
+       res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+    }
+    else {
+        jpg_chunking_t jchunk = {req, 0};
+        res = frame2jpg_cb(fb, 80, jpg_encode_stream, &jchunk) ? ESP_OK : ESP_FAIL;
+        httpd_resp_send_chunk(req, NULL, 0);
+    }
+
+    esp_camera_fb_return(fb);
+    esp_camera_return_all();
+    return res;
+}
+
+// Function that Handles the DOWNLOAD of a BMP Captured picture.
+static esp_err_t bmp_handler(httpd_req_t *req) {
+    camera_fb_t *fb = NULL;
+    esp_err_t res = ESP_OK;
+
+    esp_camera_return_all();
+    for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
+        fb = esp_camera_fb_get();
+        esp_camera_fb_return(fb);
+    }
+    fb = esp_camera_fb_get();         // so this captures the image at the moment you click
+
+    if (!fb)
+    {
+        //log_e("Camera capture failed");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "image/x-windows-bmp");
+    httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.bmp");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+    char ts[32];
+    snprintf(ts, 32, "%ld.%06ld", fb->timestamp.tv_sec, fb->timestamp.tv_usec);
+    httpd_resp_set_hdr(req, "X-Timestamp", (const char *)ts);
+
+
+    uint8_t * buf = NULL;
+    size_t buf_len = 0;
+    bool converted = frame2bmp(fb, &buf, &buf_len);
+    esp_camera_fb_return(fb);
+    if(!converted){
+        //log_e("BMP Conversion failed");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    res = httpd_resp_send(req, (const char *)buf, buf_len);
+    free(buf);
+    esp_camera_return_all();
+    return res;
+}
+
+
+// Function to handle the AUDIO STREAM
+static esp_err_t audio_stream_handler(httpd_req_t *req){
+  esp_err_t res = ESP_OK;
+  Stream_AUDIO = true;
+  CPU_Boost(true);
+ 
+  telnet_println("NEW HTTP GET request for AUDIO Stream");
+
+  // Initialize the I2S microphone
   mic_i2s_init();
 
+  // Set up the WAV File header
   WAVHeader wavHeader;
   initializeWAVHeader(wavHeader, sampleRate, bitsPerSample, numChannels);
 
-  // Get access to the client object
-  WiFiClient Audioclient = Audioserver.client();
+  // Set the response type to audio/wav
+  res = httpd_resp_set_type(req, "audio/wav");
+  if(res != ESP_OK){
+    return res;
+  }
 
-  // Send the 200 OK response with the headers
-  Audioclient.print("HTTP/1.1 200 OK\r\n");
-  Audioclient.print("Content-Type: audio/wav\r\n");
-  Audioclient.print("Access-Control-Allow-Origin: *\r\n");
-  Audioclient.print("\r\n");
+  // Set "no-cache" on Cache-Control header
+  res = httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  if (res != ESP_OK) {
+    return res;
+  }
+
+  // Set the Access-Control-Allow-Origin header
+  res = httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  if (res != ESP_OK) {
+    return res;
+  }
+
 
   // Send the initial part of the WAV header
-  Audioclient.write(reinterpret_cast<const uint8_t*>(&wavHeader), sizeof(wavHeader));
+  httpd_resp_send_chunk(req, reinterpret_cast<const char*>(&wavHeader), sizeof(wavHeader));
 
-  uint8_t buffer[bufferSize];
-  size_t bytesRead = 0;
-  //uint32_t totalDataSize = 0; // Total size of audio data sent
 
-  while (true) {
-    if (!Audioclient.connected()) {
+  int32_t buffer[bufferSize/4];   // Buffer to store the audio data (32bit format)
+  int32_t temp_buf = 0;           // temporary Buffer cell to manipulate audio sample
+  int64_t amplified = 0;          // audio sample processed (digitally amplified)
+  size_t bytesRead = 0;           // Number of bytes read, to be returned by the i2s_read() function.
+  uint32_t totalDataSize = 0;   // Total size of audio data sent through the HTTP stream.
+  
+  while (OnAir) {
+    if (httpd_req_to_sockfd(req) == -1) {
       //i2s_driver_uninstall(I2S_PORT);
-      Serial.println("Audioclient disconnected");
+      telnet_println("AUDIO client disconnected");
       break;
     }
+
     // Read audio data from I2S DMA
-    i2s_read(I2S_PORT, buffer, bufferSize, &bytesRead, portMAX_DELAY);
+    res = i2s_read(I2S_PORT, buffer, bufferSize, &bytesRead, portMAX_DELAY);
+
+    // code to Amplify the audio from 1x to 8x with no distortion. Beyond (ex.: 12x) expect peak limit.
+    for (int i=0; i<bytesRead/4; i++) {
+        temp_buf = buffer[i];
+        amplified = int64_t(temp_buf) * 32;
+        if (amplified > pow(2, 31)-1) amplified = pow(2, 31)-1;
+        if (amplified < -pow(2, 31)) amplified = -pow(2, 31);
+        temp_buf = int32_t(amplified);
+        memcpy(&buffer[i], &temp_buf, sizeof(temp_buf)); // Copy so sign bits aren't interfered with somehow.
+    }
 
     // Send audio data
     if (bytesRead > 0) {
-      Audioclient.write(buffer, bytesRead);
-      //totalDataSize += bytesRead;
-      //Serial.println(totalDataSize);
+      res = httpd_resp_send_chunk(req, reinterpret_cast<const char*>(buffer), bytesRead);
+      if (res != ESP_OK) {
+          break;
+      }
+      totalDataSize += bytesRead;
+      //telnet_println("Audio bytes sent: " + String(totalDataSize));
     }
   }
+  if(!OnAir) {
+    telnet_println("Stop capturing audio");
+    res = ESP_ERR_TIMEOUT;
+  }
+  // Clean up resources
+  i2s_driver_uninstall(I2S_PORT);
+  telnet_println("Finish HTTP GET request AUDIO Stream. Total bytes sent: " + String(totalDataSize));
+  Stream_AUDIO = false;
+  if(!Stream_VIDEO) CPU_Boost(false);
+  return res;
 }
+
+
+esp_err_t startCameraServer(){
+  esp_err_t start_res;
+  httpd_config_t cam_config = HTTPD_DEFAULT_CONFIG();
+  cam_config.server_port = 2180;
+  cam_config.lru_purge_enable=true;
+  cam_config.max_open_sockets=3;
+  cam_config.backlog_conn=0;
+  cam_config.recv_wait_timeout=4;
+  cam_config.send_wait_timeout=4;
+  
+
+  // URI handler for video stream
+  httpd_uri_t video_uri = {
+    .uri       = "/video.jpg",
+    .method    = HTTP_GET,
+    .handler   = video_stream_handler,
+    .user_ctx  = NULL
+  };
+
+
+  httpd_uri_t capture_uri = {
+    .uri       = "/capture",
+    .method    = HTTP_GET,
+    .handler   = capture_handler,
+    .user_ctx  = NULL
+  };
+
+  httpd_uri_t bmp_uri = {
+    .uri       = "/bmp",
+    .method    = HTTP_GET,
+    .handler   = bmp_handler,
+    .user_ctx  = NULL
+  };
+
+
+  /*
+  // URI handler for audio stream
+  httpd_uri_t audio_uri = {
+    .uri = "/audio",
+    .method = HTTP_GET,
+    .handler = audio_stream_handler, // You need to implement this handler
+    .user_ctx = NULL
+  };
 */
 
+  //Serial.printf("Starting web server on port: '%d'\n", cam_config.server_port);
+  start_res = httpd_start(&camera_httpd, &cam_config);
+  if ( start_res == ESP_OK) {
+      httpd_register_uri_handler(camera_httpd, &video_uri);
+      httpd_register_uri_handler(camera_httpd, &capture_uri);
+      httpd_register_uri_handler(camera_httpd, &bmp_uri);
+      telnet_println("VIDEO Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(video_uri.uri));
+      telnet_println("Camera CAPTURE Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(capture_uri.uri));
+      telnet_println("BMP capture Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(bmp_uri.uri));
+      //httpd_register_uri_handler(camera_httpd, &audio_uri);
+      //telnet_println("Audio Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(audio_uri.uri));
+
+  }
+  return start_res;
+}
+
+
+
+esp_err_t startAudioServer(){
+    esp_err_t start_res;
+    httpd_config_t cam_config = HTTPD_DEFAULT_CONFIG();
+    cam_config.server_port = 2181; // Set the desired port number
+    cam_config.ctrl_port += 10;
+    cam_config.lru_purge_enable=true;
+    cam_config.max_open_sockets=3;
+    cam_config.backlog_conn=0;
+    cam_config.recv_wait_timeout=1;
+    cam_config.send_wait_timeout=1;
+
+    // URI handler for audio stream
+    httpd_uri_t audio_uri = {
+        .uri = "/audio",
+        .method = HTTP_GET,
+        .handler = audio_stream_handler, // You need to implement this handler
+        .user_ctx = NULL
+    };
+
+
+
+  //Serial.printf("Starting web server on port: '%d'\n", cam_config.server_port);
+  start_res = httpd_start(&microphone_httpd, &cam_config);
+  if ( start_res == ESP_OK) {
+      httpd_register_uri_handler(microphone_httpd, &audio_uri);
+      telnet_println("MICROPHONE Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(audio_uri.uri));
+  }
+  return start_res;
+}
 
 
 void project_setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
- 
-  //Serial.begin(115200);
-  Serial.setDebugOutput(false);
 
   // BIG White LED
   ledcSetup(CHANNELLED, PWM_FREQ, RESOLUTION);  // Duty cycle Range of values [o-PWMRANGE] equal to FF
@@ -189,52 +510,51 @@ void project_setup() {
   ledcAttachPin(Big_LED_Pin, CHANNELLED);
   ledcWrite(CHANNELLED, 0);
 
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
-  config.pin_sccb_sda = SIOD_GPIO_NUM;
-  config.pin_sccb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  //config.frame_size = FRAMESIZE_XGA;
+  cam_config.ledc_channel = LEDC_CHANNEL_0;
+  cam_config.ledc_timer = LEDC_TIMER_0;
+  cam_config.pin_d0 = Y2_GPIO_NUM;
+  cam_config.pin_d1 = Y3_GPIO_NUM;
+  cam_config.pin_d2 = Y4_GPIO_NUM;
+  cam_config.pin_d3 = Y5_GPIO_NUM;
+  cam_config.pin_d4 = Y6_GPIO_NUM;
+  cam_config.pin_d5 = Y7_GPIO_NUM;
+  cam_config.pin_d6 = Y8_GPIO_NUM;
+  cam_config.pin_d7 = Y9_GPIO_NUM;
+  cam_config.pin_xclk = XCLK_GPIO_NUM;
+  cam_config.pin_pclk = PCLK_GPIO_NUM;
+  cam_config.pin_vsync = VSYNC_GPIO_NUM;
+  cam_config.pin_href = HREF_GPIO_NUM;
+  cam_config.pin_sccb_sda = SIOD_GPIO_NUM;
+  cam_config.pin_sccb_scl = SIOC_GPIO_NUM;
+  cam_config.pin_pwdn = PWDN_GPIO_NUM;
+  cam_config.pin_reset = RESET_GPIO_NUM;
+  cam_config.xclk_freq_hz = 20000000;
+  cam_config.pixel_format = PIXFORMAT_JPEG;
+  //cam_config.grab_mode = CAMERA_GRAB_LATEST;
+  //cam_config.frame_size = FRAMESIZE_XGA;    // Dependent of PSRAM availability
+  //cam_config.jpeg_quality = 10;             // Dependent of PSRAM availability
+  //cam_config.fb_count = 2;                  // Dependent of PSRAM availability
 
-  
+  //Check if the Board has PSRAM
   if(psramFound()){
     telnet_println("--> psramFound ! <--");
-    config.frame_size = FRAMESIZE_XGA;
-    config.jpeg_quality = 10;
-    config.fb_count = 2;
+    cam_config.frame_size = FRAMESIZE_VGA;  // original : FRAMESIZE_XGA
+    cam_config.jpeg_quality = 10;
+    cam_config.fb_count = 1;
   } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
+    cam_config.frame_size = FRAMESIZE_SVGA;
+    cam_config.jpeg_quality = 12;
+    cam_config.fb_count = 1;
   }
   
-  // Camera initialization
-  esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err);
-    return;
-  }
-
-
   
   // Start streaming web server
   //startCameraServer();
+  telnet_println("BT radio: " + String(esp_bt_check()));
+
+  // Slow down the CPU to minimize power consumption
+  CPU_Boost(false);
+ 
 }
 
 void project_loop() {
@@ -246,12 +566,46 @@ void project_loop() {
   }
 
   if(OnAir != OnAir_Last) {
-      if(OnAir) startCameraServer();
-      else telnet_println("Stopped HTTP stream with error: " + String(httpd_stop(stream_httpd)) );
+      if(OnAir) {
+          if (WIFI_state != WL_CONNECTED) return;     // do nothing until be connected. 
+          // Camera initialization
+          esp_camera_deinit();
+          esp_err_t err = esp_camera_init(&cam_config);
+          if (err != ESP_OK) {
+              //Serial.printf("Camera init failed with error 0x%x", err);
+              esp_camera_deinit();
+              delay(5000);
+              telnet_println("Camera init failed with error: [" + String(err,HEX) + "] - " + String(esp_err_to_name(err)));
+              if(err == ESP_ERR_NOT_FOUND) {
+                  mqtt_publish(mqtt_pathtele, "Status", "CAM ERROR");
+                  OnAir = false;
+              }
+              return;
+          };
+          config.DEEPSLEEP = false;
+          mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
+          if(camera_httpd == NULL) startCameraServer();
+          if(microphone_httpd == NULL) startAudioServer();
+      }
+      else {
+        telnet_println("Stopped CAMERA stream with error: " + String(httpd_stop(camera_httpd)) );
+        telnet_println("Stopped MICROPHONE stream with error: " + String(httpd_stop(microphone_httpd)));
+        camera_httpd = NULL;
+        microphone_httpd = NULL;
+        esp_camera_deinit();
+        config.DEEPSLEEP = true;
+      }
+      Light = false;      // Turning light OFF, regardelss of OnAir status it's going to.
       mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
-      Light = false;
       OnAir_Last = OnAir;
   }
 
-
+  /*  //Logic flow to save energy depending on "sun" / time of the day. 
+  if (NTP_Sync && millis() % 600000 < 5) {
+      DateTime = ConvertTimeStamp(curUnixTime());
+      if(DateTime.hour > 20 || DateTime.hour <  7) { if(!config.DEBUG)deepsleep_procedure(60); }  
+      else telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
+  }
+  */
+  if (millis() > 1800000) OnAir = false;   // Automatically disable OnAir after 30 minutes (to save battery).
 }

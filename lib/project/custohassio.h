@@ -4,15 +4,19 @@
 
 void custo_hassio_disc(){
     config_entity("light","None","Light");
+    config_entity("switch","None","OnAir", "", true);
+    config_entity("sensor","None","Public_IP");
 //    config_entity("switch","switch","Switch");
-//    config_entity("sensor","none","Timer");
+//    config_entity("sensor","None","Timer");
 //    config_trigger("Button_1");
 }
 
 void custo_hassio_del(){
     delete_entity("light","None","Light");
+    delete_entity("switch","None","OnAir");
+    delete_entity("sensor","None","Public_IP");
 //    delete_entity("switch","switch","Switch");
-//    delete_entity("sensor","none","Timer");
+//    delete_entity("sensor","None","Timer");
 //    delete_trigger("Button_1");
 }
 
@@ -31,10 +35,10 @@ void trigger_syncme() {
     attributes_doc["MODELName"]             = MODELName;                            // Device model name
     attributes_doc["Location"]              = config.Location;                      // Device location
     attributes_doc["DeviceName"]            = config.DeviceName;                    // Device friendly name
-    attributes_doc["src_Param"]             = "cover";                              // Source Parameter. Tipically it's the param, but lowercased.
-    attributes_doc["Component"]             = "cover";                              // using "component" instead of entity in HA automation/Script
-    attributes_doc["Attribute"]             = "current_position";                   // entity attribute
-    attributes_doc["dst_Param"]             = "Position";                           // Destination Parameter
+    attributes_doc["src_Param"]             = "OnAir";                              // Source Parameter. Tipically it's the param, but lowercased.
+    attributes_doc["Component"]             = "switch";                             // using "component" instead of entity in HA automation/Script
+    attributes_doc["Attribute"]             = "OnAir";                              // entity attribute
+    attributes_doc["dst_Param"]             = "OnAir";                              // Destination Parameter
 
     serializeJson(attributes_doc, attributes_jsonString);                           //Serialize JSON data to string
     //telnet_println("Trigger SyncMe: " + String(attributes_jsonString));

@@ -81,7 +81,8 @@ void send_switch_attributes(String param) {
 // HASSIO Configuration registration
 // NOTE! entity and device_class must be lowecased, except "None"
 // check for entity and device_class in https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
-void config_entity(String entity, String device_class, String param = "", String device = "") {
+// retain is only applicable to switch entity
+void config_entity(String entity, String device_class, String param = "", String device = "", bool dis_retain = false) {
     if(param == "") param = device_class;       // use the "device_class" as "param" value
 
     // Discovery Topic: // <discovery_prefix>/<entity>/[<node_id>/]<object_id>/config
@@ -118,7 +119,9 @@ void config_entity(String entity, String device_class, String param = "", String
         discovery_doc["stat_t"]         = "~/inform/" + param;                  // state_topic
         discovery_doc["cmd_t"]          = "~/command/" + param;                 // command_topic
 
+        if (dis_retain) discovery_doc["ret"] = true;                            // retain
         if(param == "LED") discovery_doc["icon"] = "hass:lighthouse-on";
+
         if(param == "Exterior") { 
             //discovery_doc["json_attr_t"] = "~/inform/" + "attr_" + param;     // Attributes topic
             discovery_doc["icon"]       = "hass:coach-lamp";
@@ -143,6 +146,12 @@ void config_entity(String entity, String device_class, String param = "", String
         //discovery_doc["stat_on"]      = "1";
         discovery_doc["pl_off"]         = "0";                                  // Payload_off
         discovery_doc["pl_on"]          = "1";                                  // Payload_on
+    }
+
+    if(entity == "button") {                                                    // "push" Button for actions like Restart 
+        if(device_class != "None") discovery_doc["device_class"] = device_class;    // Device_class (ex.: shutter)
+        discovery_doc["cmd_t"]          = "~/command/" + param;                 // command_topic
+        discovery_doc["cmd_tpl"]        = "1";                                  // command_template
     }
 
     if(entity == "binary_sensor") {
@@ -329,6 +338,7 @@ void hassio_discovery() {
     else delete_entity("sensor", "battery", "Battery");
     if (LED_ESP>=0) config_entity("switch", "switch", "LED");
     config_entity("sensor", "signal_strength", "RSSI");
+    config_entity("button", "Restart");
     custo_hassio_disc();
     if (HASSIO_Fail == 0 ) {
         config.HASSIO_CFG = true;
@@ -342,6 +352,7 @@ void hassio_delete() {
     delete_entity("sensor", "battery", "Battery");
     delete_entity("switch", "switch", "LED");
     delete_entity("sensor", "signal_strength", "RSSI");
+    delete_entity("button", "Restart");
     //delete_trigger_boot();                                // not used
     custo_hassio_del();
     config.HASSIO_CFG = false;

@@ -31,5 +31,9 @@ void custom_update(){
     //ambient_data();
     //mqtt_dump_data(mqtt_pathtele, "Telemetry");
     mqtt_publish(mqtt_pathtele, "Light", String(Light));
-    mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
+    //mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
+    //mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
+    telnet_print("OnAir: " + String(OnAir));
+    telnet_print(" - Stream_VIDEO: " + String(Stream_VIDEO));
+    telnet_println(" - Stream_AUDIO: " + String(Stream_AUDIO));
 }

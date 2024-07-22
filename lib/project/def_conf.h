@@ -9,7 +9,7 @@
 // -- HARWARE & SOFTWARE Version --
 #define BRANDName           "AlBros_Team"                 // Hardware brand name
 #define MODELName           "WEBCam"                      // Hardware model name
-#define SWVer               "01.02"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
+#define SWVer               "02.07"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
 
 // -- Model Variants Definition --                        // Identify variants for acomodade small code changes 
 //#define ModelVariant                                    // Ex.: MoesHouse cover, Ambisense version,... 
@@ -39,8 +39,8 @@
 #define NEOPixelsNUM        -1                            // Number of NeoPixels LEDs attached
 
 // -- Power Source & Battery Level --
-bool BattPowered =       false;                           // Is the device battery powered?
-#define Res_Div          false                            // Do you have a Resistor divider (ence needs to multiply by 2)?
+bool BattPowered =       true;                            // Is the device battery powered?
+#define Res_Div           true                            // Do you have a Resistor divider (ence needs to multiply by 2)?
 #define Batt_L_Thrs         15                            // Battery level threshold [0%-100%] (before slepping forever).
 #define Using_ADC         true                            // ESP8266 only. Will you use the ADC? (if not, it will measure the internal voltage)
 //#define IP5306                                          // Power Management chip. TTGo T-Call module uses this.
@@ -61,9 +61,9 @@ bool BattPowered =       false;                           // Is the device batte
 #define SCKPIN              -1                            // 8266=5, ESP32=22, -1 means NO SCK used!
 
 // -- I2S PIN Definition --
-#define I2S_WS               2                            // Microphone WS PIN
-#define I2S_SCK             14                            // Microphone SCK PIN
-#define I2S_SD              15                            // Microphone SD PIN
+#define I2S_WS              14                            // Microphone WS PIN 2
+#define I2S_SCK             15                            // Microphone SCK PIN 14
+#define I2S_SD              13                            // Microphone SD PIN 15
 
 // -- DHT Definition --
 #define DHTTYPE              2                            // use 1 for "DHT11", 2 for "DHT22", or 3 for "AM2320" to select the DHT Model
@@ -107,7 +107,7 @@ void config_defaults() {
     strcpy(config.Location, "Home");                      // Device Location
     strcpy(config.ClientID, "001001");                    // Client ID (used on MQTT)
     config.ONTime = 10;                                   // 0-255 seconds (Byte range)
-    config.SLEEPTime = 0;                                 // 0-255 minutes (Byte range)
+    config.SLEEPTime = 2;                                 // 0-255 minutes (Byte range)
     config.DEEPSLEEP = true;                              // 0 - Disabled, 1 - Enabled
     config.LED = true;                                    // 0 - OFF, 1 - ON
     config.TELNET = true;                                 // 0 - Disabled, 1 - Enabled
@@ -115,7 +115,7 @@ void config_defaults() {
     config.WEB = false;                                   // 0 - Disabled, 1 - Enabled
     config.Remote_Allow = true;                           // 0 - Not Allow, 1 - Allow remote operation
     config.STAMode = true;                                // 0 - AP or AP+STA Mode, 1 - Station only Mode
-    config.APMode = true;                                 // 0 - AP Mode Disabled, 1 - AP Mode Enabled
+    config.APMode = false;                                 // 0 - AP Mode Disabled, 1 - AP Mode Enabled
     strcpy(config.SSID, "WiFiCasaN");                     // Wireless LAN SSID (STA mode)
     strcpy(config.WiFiKey, "12345678");                   // Wireless LAN Key (STA mode)
     config.DHCP = true;                                   // 0 - Static IP, 1 - DHCP

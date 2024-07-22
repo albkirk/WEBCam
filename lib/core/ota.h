@@ -37,8 +37,9 @@ bool OTA_BUSY = false;            // To flag that is performing OTA
         });
         ArduinoOTA.onEnd([]() {
             //hassio_delete();    // Uncomment this line to force the HASSIO discovery after the upgrade 
-            flash_LED(15);      // Flash board led 15 times at end
+            if(LED_ESP>=0) flash_LED(15);      // Flash board led 15 times at end
             telnet_println("\nOTA END with success!");
+            OTA_BUSY = false;
             global_restart("Upgraded");
         });
         ArduinoOTA.onError([](ota_error_t error) {

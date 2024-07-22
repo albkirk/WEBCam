@@ -71,6 +71,7 @@ void on_message(const char* topic, byte* payload, unsigned int msg_length) {
     if ( command == "DEBUG") { config.DEBUG = bool(cmd_value.toInt()); telnet_println("DEBUG = " + String(config.DEBUG)); storage_write(); }
     if ( command == "Store") if (bool(cmd_value.toInt()) == true) storage_write();
     if ( command == "Restart")  if (bool(cmd_value.toInt()) == true) {mqtt_publish(mqtt_pathcomd, "Restart", "", true); global_restart();}
+    if ( command == "ShutDown") if (bool(cmd_value.toInt()) ) {mqtt_publish(mqtt_pathcomd, "ShutDown", "", true); GoingToSleep(0, curUTCTime());}
     if ( command == "Reset") if (bool(cmd_value.toInt()) == true) {mqtt_publish(mqtt_pathcomd, "Reset", "", true); hassio_delete(); global_reset();}
     if ( command == "Format") if (bool(cmd_value.toInt()) == true) FormatConfig();
     if ( command == "Version") {mqtt_publish(mqtt_pathtele, "Version", String(SWVer)); telnet_println("Version: " + String(SWVer));}

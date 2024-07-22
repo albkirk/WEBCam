@@ -57,14 +57,18 @@ void Buzz(unsigned int n_beeps = 1, unsigned long buzz_time = BUZZER_millis ) {
     }
 }
 
+void deepsleep_procedure(byte deepsleeptime = SLEEPTime) {
+    mqtt_publish(mqtt_pathtele, "Status", "DeepSleep");
+    mqtt_disconnect();
+    telnet_println("Going to sleep for " + String(deepsleeptime) + " min, or until next event ... zzZz :) ");
+    //delay(100);
+    telnet_println("Total time ON: " + String(millis()) + " msec");
+    GoingToSleep(deepsleeptime, curUTCTime());
+}
+
 void deepsleep_loop() {
     if (config.DEEPSLEEP && millis() > ONTime_Offset + (ulong(config.ONTime) + Extend_time)*1000) {
-        mqtt_publish(mqtt_pathtele, "Status", "DeepSleep");
-        mqtt_disconnect();
-        telnet_println("Going to sleep for " + String(SLEEPTime) + " min, or until next event ... zzZz :) ");
-        //delay(100);
-        telnet_println("Total time ON: " + String(millis()) + " msec");
-        GoingToSleep(SLEEPTime, curUTCTime());
+        deepsleep_procedure();
     }
 }
 

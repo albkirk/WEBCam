@@ -139,6 +139,19 @@ void esp_wifi_disconnect() {
     WiFi.mode(WIFI_MODE_NULL);
 }
 
+
+void esp_bt_connect() {
+    btStart();
+}
+
+void esp_bt_disconnect() {
+    btStop();
+}
+
+bool esp_bt_check() {
+    return btStarted();
+}
+
 uint8_t wifi_waitForConnectResult(unsigned long timeout) {
     return WiFi.waitForConnectResult();
 }
@@ -285,7 +298,7 @@ static const String RESET_REASON_to_string[] = {
     "SW_RESET",                /**<=  3, Software reset digital core*/
     "OWDT_RESET",              /**<=  4, Legacy watch dog reset digital core*/
     "Deep-Sleep Wake",         /**<=  5, Deep Sleep reset digital core  original msg -> "DEEPSLEEP_RESET"*/
-    "SDIO_RESET",              /**<=  6, Reset by SLC module, reset digital core*/
+    "Deep-Sleep Wake",         /**<=  "SDIO_RESET" 6, Reset by SLC module, reset digital core*/  
     "TG0WDT_SYS_RESET",        /**<=  7, Timer Group0 Watch dog reset digital core*/
     "TG1WDT_SYS_RESET",        /**<=  8, Timer Group1 Watch dog reset digital core*/
     "RTCWDT_SYS_RESET",        /**<=  9, RTC Watch dog Reset digital core*/

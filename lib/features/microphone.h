@@ -8,11 +8,11 @@
 
 //---- Sampling ------------
 #define SAMPLE_RATE       22050 // Sample rate of the audio 
-#define SAMPLE_BITS       32    // Bits per sample of the audio
+#define SAMPLE_BITS          32 // Bits per sample of the audio
 //CAMERA_MODEL_XIAO_ESP32S3
 //#define SAMPLE_BITS       16
-#define DMA_BUF_COUNT     2
-#define DMA_BUF_LEN       1024
+#define DMA_BUF_COUNT        2
+#define DMA_BUF_LEN        512  // Original value-> 1014
 
 
 //---- Audio WAV configuration ------------
@@ -22,8 +22,8 @@ const int bitsPerSample = SAMPLE_BITS; // Bits per sample of the audio
 const int numChannels = 1; // Number of audio channels (1 for mono, 2 for stereo)
 const int bufferSize = DMA_BUF_LEN; // Buffer size for I2S data transfer
 
-struct WAVHeader {
-  char chunkId[4];          // 4 bytes
+ struct WAVHeader {          // See https://docs.fileformat.com/audio/wav/ for details
+  char chunkId[4];          // 4 bytes  or http://soundfile.sapp.org/doc/WaveFormat/
   uint32_t chunkSize;       // 4 bytes
   char format[4];           // 4 bytes
   char subchunk1Id[4];      // 4 bytes
@@ -38,16 +38,16 @@ struct WAVHeader {
   uint32_t subchunk2Size;   // 4 bytes
 };
 
+ 
 void initializeWAVHeader(WAVHeader &header, uint32_t sampleRate, uint16_t bitsPerSample, uint16_t numChannels) {
-
   strncpy(header.chunkId, "RIFF", 4);
   strncpy(header.format, "WAVE", 4);
   strncpy(header.subchunk1Id, "fmt ", 4);
   strncpy(header.subchunk2Id, "data", 4);
 
-  header.chunkSize = 0; // Placeholder for Chunk Size (to be updated later)
-  header.subchunk1Size = 16; // PCM format size (constant for uncompressed audio)
-  header.audioFormat = 1; // PCM audio format (constant for uncompressed audio)
+  header.chunkSize = 0;     // Placeholder for Chunk Size (to be updated later)
+  header.subchunk1Size = 16;// PCM format size (constant for uncompressed audio)
+  header.audioFormat = 1;   // PCM audio format (constant for uncompressed audio)
   header.numChannels = numChannels;
   header.sampleRate = sampleRate;
   header.bitsPerSample = bitsPerSample;
@@ -55,6 +55,7 @@ void initializeWAVHeader(WAVHeader &header, uint32_t sampleRate, uint16_t bitsPe
   header.blockAlign = (bitsPerSample * numChannels) / 8;
   header.subchunk2Size = 0; // Placeholder for data size (to be updated later)
 }
+
 
 void mic_i2s_init() {
 

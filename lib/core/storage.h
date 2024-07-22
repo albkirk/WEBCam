@@ -75,22 +75,22 @@ void storeStruct(void *data_source, size_t size, int start_address) {
 //  CONFIG Struct
 //
 struct __attribute__((__packed__)) strConfig {
-  char DeviceName[16];
-  char Location[16];
-  char ClientID[8];
-  byte ONTime;
-  byte SLEEPTime;
-  bool DEEPSLEEP;
-  bool LED;
-  bool TELNET;
-  bool OTA;
-  bool WEB;
-  bool Remote_Allow;
-  bool STAMode;
-  bool APMode;
-  char SSID[32];
-  char WiFiKey[32];
-  bool DHCP;
+  char DeviceName[16];            // Device Name
+  char Location[16];              // Device Location
+  char ClientID[8];               // Client ID (used on MQTT)
+  byte ONTime;                    // 0-255 seconds (Byte range)
+  byte SLEEPTime;                 // 0-255 minutes (Byte range)
+  bool DEEPSLEEP;                 // 0 - Disabled, 1 - Enabled
+  bool LED;                       // 0 - OFF, 1 - ON
+  bool TELNET;                    // 0 - Disabled, 1 - Enabled
+  bool OTA;                       // 0 - Disabled, 1 - Enabled
+  bool WEB;                       // 0 - Disabled, 1 - Enabled
+  bool Remote_Allow;              // 0 - Not Allow, 1 - Allow remote operation  
+  bool STAMode;                   // 0 - AP or AP+STA Mode, 1 - Station only Mode
+  bool APMode;                    // 0 - AP Mode Disabled, 1 - AP Mode Enabled
+  char SSID[32];                  // Wireless LAN SSID (STA mode)
+  char WiFiKey[32];               // Wireless LAN Key (STA mode)
+  bool DHCP;                      // 0 - Static IP, 1 - DHCP
   byte IP[4];
   byte Netmask[4];
   byte Gateway[4];

@@ -144,7 +144,7 @@ void getNTPtime(unsigned long timeout_sync = 1000UL)
     {
       UTCTimeStamp = NTPTime;
       ntpNOW = millis();                     // To make sure that it 1st value is valid
-      telnet_println("NTP extracted from Internet.");
+      telnet_println("NTP extracted from Internet with SUCCESS!");
     }
   }
   if (ESPWakeUpReason() == "Deep-Sleep Wake" && loop_timeOut)
@@ -163,7 +163,7 @@ void getNTPtime(unsigned long timeout_sync = 1000UL)
   else
   {
     NTP_errors++;
-    telnet_println("NTP ERROR! ==> NO valid Local Date / Time");
+    telnet_println("NTP ERROR! ==> NO valid Local Date - Time");
   }
 }
 
