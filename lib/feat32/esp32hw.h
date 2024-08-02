@@ -24,7 +24,7 @@ String HEXtoUpperString(uint32_t hexval, uint hexlen);
 String ChipID=HEXtoUpperString(getChipId(), 6);
 #define ESP_SSID String("ESP-" + ChipID)    // SSID to use as Access Point
 #define Number_of_measures 5                // Number of value samples (measurements) to calculate average
-byte SLEEPTime = config.SLEEPTime;          // Variable to allow temporary change the sleeptime (ex.: = 0)
+unsigned long SLEEPTime = 0;                // Variable to allow temporary change the sleeptime (ex.: = 0)
 bool Celular_Connected = false;             // Modem Connection state
 
 
@@ -213,16 +213,16 @@ bool RTC_reset() {
 }
 
 //  ESP8266
-void GoingToSleep(byte Time_minutes = 0, unsigned long currUTime = 0 ) {
+void GoingToSleep(unsigned long Time_seconds = 0, unsigned long currUTime = 0 ) {
     rtcData.lastUTCTime = currUTime;
     keep_IP_address();
     RTC_write();
-    ESP.deepSleep( Time_minutes * 60 * 1000000);          // time in minutes converted to microseconds
+    ESP.deepSleep( Time_seconds * 1000000);          // time in minutes converted to microseconds
 }
 */
 
 // ESP32
-void GoingToSleep(byte Time_minutes = 0, unsigned long currUTime = 0 ) {
+void GoingToSleep(unsigned long Time_seconds = 0, unsigned long currUTime = 0) {
     // https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/deepsleep.html
     uint64_t calculate_sleeptime;
   // Store counter to the Preferences
@@ -234,7 +234,7 @@ void GoingToSleep(byte Time_minutes = 0, unsigned long currUTime = 0 ) {
 
   // Configure Wake Up
 #ifndef ESP32C3
-    if ( Ext1WakeUP>=0 && (Time_minutes == 0 || Time_minutes > 5) ) {
+    if ( Ext1WakeUP>=0 && (Time_seconds == 0 || Time_seconds > 300 ) ) {
         const uint64_t ext1_wakeup_pin_1_mask = 1ULL << Ext1WakeUP;      // -1 Warning during compilling
         //const uint64_t ext1_wakeup_pin_1_mask = Ext1WakeUP;
         esp_sleep_enable_ext1_wakeup(ext1_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ALL_LOW);
@@ -251,14 +251,14 @@ void GoingToSleep(byte Time_minutes = 0, unsigned long currUTime = 0 ) {
         ulp_action(1000000);                                       // 10 second loop
     }
 #else
-    if ( Ext1WakeUP>=0 && (Time_minutes == 0 || Time_minutes > 5) ) {
+    if ( Ext1WakeUP>=0 && (Time_seconds == 0 || Time_seconds > 300) ) {
         const uint64_t ext1_wakeup_pin_1_mask = 1ULL << Ext1WakeUP;      // -1 Warning during compilling
         esp_deep_sleep_enable_gpio_wakeup(ext1_wakeup_pin_1_mask, ESP_GPIO_WAKEUP_GPIO_LOW);  //ESP_GPIO_WAKEUP_GPIO_LOW , ESP_GPIO_WAKEUP_GPIO_HIGH
     }
 #endif
 
-    if (Time_minutes > 0) {
-        calculate_sleeptime = uint64_t( ((Time_minutes * 60000UL) - millis()%(Time_minutes * 60000UL)) ) * 1000ULL;
+    if (Time_seconds > 0) {
+        calculate_sleeptime = uint64_t( ((Time_seconds * 1000UL) - millis()%(Time_seconds * 1000UL)) ) * 1000ULL;
         //Serial.printf("calculate_sleeptime :%llu\n", calculate_sleeptime);
         esp_sleep_enable_timer_wakeup(calculate_sleeptime);  // time in minutes converted to microseconds
     }

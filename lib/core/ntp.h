@@ -163,7 +163,7 @@ void getNTPtime(unsigned long timeout_sync = 1000UL)
   else
   {
     NTP_errors++;
-    telnet_println("NTP ERROR! ==> NO valid Local Date - Time");
+    telnet_println("NTP ERROR! ==> NO valid Local Date / Time");
   }
 }
 

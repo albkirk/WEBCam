@@ -9,7 +9,7 @@
 // -- HARWARE & SOFTWARE Version --
 #define BRANDName           "AlBros_Team"                 // Hardware brand name
 #define MODELName           "WEBCam"                      // Hardware model name
-#define SWVer               "02.07"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
+#define SWVer               "02.08"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
 
 // -- Model Variants Definition --                        // Identify variants for acomodade small code changes 
 //#define ModelVariant                                    // Ex.: MoesHouse cover, Ambisense version,... 
@@ -107,7 +107,7 @@ void config_defaults() {
     strcpy(config.Location, "Home");                      // Device Location
     strcpy(config.ClientID, "001001");                    // Client ID (used on MQTT)
     config.ONTime = 10;                                   // 0-255 seconds (Byte range)
-    config.SLEEPTime = 2;                                 // 0-255 minutes (Byte range)
+    config.SLEEPTime = 1;                                 // 0-255 minutes (Byte range)
     config.DEEPSLEEP = true;                              // 0 - Disabled, 1 - Enabled
     config.LED = true;                                    // 0 - OFF, 1 - ON
     config.TELNET = true;                                 // 0 - Disabled, 1 - Enabled

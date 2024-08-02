@@ -40,7 +40,7 @@ void on_message(const char* topic, byte* payload, unsigned int msg_length) {
     if ( command == "Location" && cmd_value !="") {hassio_delete(); strcpy(config.Location, cmd_value.c_str()); hassio_discovery(); state_update(); config_backup(); mqtt_publish(mqtt_pathcomd, "Location", "", true); }
     if ( command == "ClientID") {hassio_delete(); strcpy(config.ClientID, cmd_value.c_str()); config_backup(); global_restart(); }
     if ( command == "DEEPSLEEP" && cmd_value !="") { config.DEEPSLEEP = bool(cmd_value.toInt()); storage_write(); mqtt_publish(mqtt_pathcomd, "DEEPSLEEP", "", true);}
-    if ( command == "SLEEPTime" && cmd_value !="" && cmd_value.toInt() >= 0) { config.SLEEPTime = byte(cmd_value.toInt()); SLEEPTime = config.SLEEPTime; storage_write(); mqtt_publish(mqtt_pathcomd, "SLEEPTime", "", true); }
+    if ( command == "SLEEPTime" && cmd_value !="" && cmd_value.toInt() >= 0) { config.SLEEPTime = byte(cmd_value.toInt()); SLEEPTime = config.SLEEPTime * 60UL; storage_write(); mqtt_publish(mqtt_pathcomd, "SLEEPTime", "", true); }
     if ( command == "ONTime") { config.ONTime = byte(cmd_value.toInt());storage_write(); }
     if ( command == "ExtendONTime") if (bool(cmd_value.toInt()) == true) Extend_time = 60;
     if ( command == "LED") {config.LED = bool(cmd_value.toInt()); mqtt_publish(mqtt_pathtele, "LED", String(config.LED));}

@@ -29,6 +29,10 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+// CAM Sensor configuration
+bool VFlip =             false;         // Vertical Flip image?
+bool HMirror =           false;         // Hiorizontal mirror image?
+
 // LED, PWM and others configuration 
 #define RESOLUTION           8          // Duty cycle bits (8 -> 255) equalto FF
 #define PWM_FREQ          1000          // PWM Frequency
@@ -63,6 +67,7 @@ typedef struct
 } jpg_chunking_t;
 
 static camera_config_t cam_config;
+static sensor_t * cam_sensor;
 
 
 // **** Project code functions here ...
@@ -502,7 +507,11 @@ esp_err_t startAudioServer(){
 
 
 void project_setup() {
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+  // Disable brownout detector
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
+
+  // Use config.SLEEPTime values in seconds
+  SLEEPTime = config.SLEEPTime * 1UL;  
 
   // BIG White LED
   ledcSetup(CHANNELLED, PWM_FREQ, RESOLUTION);  // Duty cycle Range of values [o-PWMRANGE] equal to FF
@@ -547,6 +556,9 @@ void project_setup() {
     cam_config.fb_count = 1;
   }
   
+    // Get ESP32-Cam sensor configuration, such vflip and hmirror features
+    cam_sensor = esp_camera_sensor_get();
+  
   
   // Start streaming web server
   //startCameraServer();
@@ -571,14 +583,20 @@ void project_loop() {
           // Camera initialization
           esp_camera_deinit();
           esp_err_t err = esp_camera_init(&cam_config);
+          telnet_println("Configuring VFlip: " + String(VFlip) + " HMirror: " + String(HMirror));
+          cam_sensor = esp_camera_sensor_get();
+          cam_sensor->set_vflip(cam_sensor, VFlip ? 1 : 0);
+          cam_sensor->set_hmirror(cam_sensor, HMirror ? 1 : 0);
           if (err != ESP_OK) {
               //Serial.printf("Camera init failed with error 0x%x", err);
               esp_camera_deinit();
+              cam_sensor->reset(cam_sensor);
               delay(5000);
               telnet_println("Camera init failed with error: [" + String(err,HEX) + "] - " + String(esp_err_to_name(err)));
               if(err == ESP_ERR_NOT_FOUND) {
                   mqtt_publish(mqtt_pathtele, "Status", "CAM ERROR");
-                  OnAir = false;
+                  //OnAir = false;
+                  //config.DEEPSLEEP = true;
               }
               return;
           };
@@ -607,5 +625,8 @@ void project_loop() {
       else telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
   }
   */
-  if (millis() > 1800000) OnAir = false;   // Automatically disable OnAir after 30 minutes (to save battery).
+  if (millis() > 1800000) {
+      mqtt_publish(mqtt_pathcomd, "OnAir", "", true);
+      OnAir = false;   // Automatically disable OnAir after 30 minutes (to save battery).
+  }
 }

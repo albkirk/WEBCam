@@ -57,10 +57,10 @@ void Buzz(unsigned int n_beeps = 1, unsigned long buzz_time = BUZZER_millis ) {
     }
 }
 
-void deepsleep_procedure(byte deepsleeptime = SLEEPTime) {
+void deepsleep_procedure(unsigned long deepsleeptime = SLEEPTime) {
     mqtt_publish(mqtt_pathtele, "Status", "DeepSleep");
     mqtt_disconnect();
-    telnet_println("Going to sleep for " + String(deepsleeptime) + " min, or until next event ... zzZz :) ");
+    telnet_println("Going to sleep for " + String(deepsleeptime) + " seconds, or until next event ... zzZz :) ");
     //delay(100);
     telnet_println("Total time ON: " + String(millis()) + " msec");
     GoingToSleep(deepsleeptime, curUTCTime());
@@ -117,7 +117,7 @@ void Batt_OK_check() {                      // If LOW Batt, it will DeepSleep fo
         //#endif
         flash_LED(10);
         delay(100);
-        GoingToSleep(0, curUnixTime());     // Sleep forever
+        GoingToSleep(0, curUTCTime());     // Sleep forever
         return;                             // Actually, it will never return !!
     }
     else return;                            // Batt OK, returning null
@@ -185,7 +185,7 @@ void global_setup() {
         pinMode(Reset_Btn, INPUT_PULLUP);
     }
 
-    SLEEPTime = config.SLEEPTime;          // Variable to allow temporary change the sleeptime (ex.: = 0)
+    SLEEPTime = config.SLEEPTime * 60UL;          // Variable to allow temporary change the sleeptime (ex.: = 0)
 }
 
 void global_loop() {

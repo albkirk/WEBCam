@@ -21,8 +21,26 @@ void custom_mqtt(String command, String cmd_value) {
 
 //  if ( command == "send_Telemetry" && bool(cmd_value.toInt())) { gps_update(); print_gps_data(); send_Telemetry(); }
 
-    if ( command == "Light") { Light = bool(cmd_value.toInt());}
-    if ( command == "OnAir") { OnAir = bool(cmd_value.toInt());}
+    if ( command == "Light") {
+        if ( Light_Last == bool(cmd_value.toInt()) ) mqtt_publish(mqtt_pathtele, "Light", String(Light));
+        else Light = bool(cmd_value.toInt());
+    }
+    if ( command == "OnAir") {
+        if ( OnAir_Last == bool(cmd_value.toInt()) ) mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
+        else OnAir = bool(cmd_value.toInt());
+    }
+    if ( command == "VFlip") {
+        VFlip = bool(cmd_value.toInt());
+        cam_sensor = esp_camera_sensor_get();
+        if (OnAir) cam_sensor->set_vflip(cam_sensor, VFlip ? 1 : 0);
+        mqtt_publish(mqtt_pathtele, "VFlip", String(VFlip));
+    }
+    if ( command == "HMirror") {
+        HMirror = bool(cmd_value.toInt());
+        cam_sensor = esp_camera_sensor_get();
+        if (OnAir) cam_sensor->set_hmirror(cam_sensor, HMirror ? 1 : 0);
+        mqtt_publish(mqtt_pathtele, "HMirror", String(HMirror));
+    }
 
 }
 
@@ -34,6 +52,8 @@ void custom_update(){
     //mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
     //mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
     telnet_print("OnAir: " + String(OnAir));
+    telnet_print(" - VFlip: " + String(VFlip));
+    telnet_print(" - HMirror: " + String(HMirror));
     telnet_print(" - Stream_VIDEO: " + String(Stream_VIDEO));
     telnet_println(" - Stream_AUDIO: " + String(Stream_AUDIO));
 }
