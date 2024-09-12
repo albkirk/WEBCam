@@ -45,6 +45,7 @@ void send_status_attributes(String param) {
     //attributes_doc["CPUClock"]          = CPU_Clock();                          // CPU Clock
     attributes_doc["Boot"]              = ESPWakeUpReason();                    // Boot Reason
     if (WIFI_state == WL_CONNECTED) attributes_doc["IP"] = WiFi.localIP().toString(); // WiFi IP address
+    if (config.DEBUG) attributes_doc["BSSID"] = WiFi.BSSIDstr();                // WiFi BSSID address
     #ifdef Modem_WEB_TELNET
         if (Celular_Connected) attributes_doc["IP"] = ModemIP;                  // Modem IP address
     #endif

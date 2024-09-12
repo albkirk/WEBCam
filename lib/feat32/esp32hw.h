@@ -258,8 +258,14 @@ void GoingToSleep(unsigned long Time_seconds = 0, unsigned long currUTime = 0) {
 #endif
 
     if (Time_seconds > 0) {
+        /*
+        if (millis() < (Time_seconds * 1000UL)) {
         calculate_sleeptime = uint64_t( ((Time_seconds * 1000UL) - millis()%(Time_seconds * 1000UL)) ) * 1000ULL;
         //Serial.printf("calculate_sleeptime :%llu\n", calculate_sleeptime);
+        }
+        else calculate_sleeptime = uint64_t(Time_seconds * 1000000UL);
+        */
+        calculate_sleeptime = uint64_t(Time_seconds * 1000000UL);
         esp_sleep_enable_timer_wakeup(calculate_sleeptime);  // time in minutes converted to microseconds
     }
     esp_deep_sleep_start();

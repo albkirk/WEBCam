@@ -102,6 +102,14 @@ void on_message(const char* topic, byte* payload, unsigned int msg_length) {
             storage_write();
             mqtt_publish(mqtt_pathtele, "Battery", String(getBattLevel(),0));
        }
+    if ( command == "WiFi") if (bool(cmd_value.toInt()) == true) {
+            WIFI_state = WL_DISCONNECTED;
+            wifi_connect();
+        }
+        else {
+            WIFI_state = WL_RADIO_OFF;
+            wifi_disconnect();           
+        }
     if ( command == "HW_Module") {
             config.HW_Module = bool(cmd_value.toInt());
             storage_write();
@@ -187,7 +195,7 @@ void mqtt_init_path() {
 
 // MQTT commands to run on setup function.
 void mqtt_setup() {
-    float Batt_Level; 
+    //float Batt_Level; 
 
     mqtt_init_path();
     mqtt_set_client();
@@ -195,9 +203,12 @@ void mqtt_setup() {
     mqtt_setcallback();
     if (MQTT_state == MQTT_CONNECTED) {
         if (ESPWakeUpReason() == "Deep-Sleep Wake") {
+            /*
             mqtt_publish(mqtt_pathtele, "Status", "WakeUp");
             Batt_Level = getBattLevel();
             if (Batt_Level >= 0) mqtt_publish(mqtt_pathtele, "Battery", String(Batt_Level,0));
+            */
+            status_report();
         }
         else {
             // 1st RUN ?

@@ -7,7 +7,7 @@ void custo_hassio_disc(){
     config_entity("switch","None","VFlip", "", true);
     config_entity("switch","None","HMirror", "", true);
     config_entity("switch","None","OnAir", "", true);
-    config_entity("sensor","None","Public_IP");
+    config_entity("sensor","None","Local_IP");
 //    config_entity("switch","switch","Switch");
 //    config_entity("sensor","None","Timer");
 //    config_trigger("Button_1");
@@ -18,7 +18,7 @@ void custo_hassio_del(){
     delete_entity("switch","None","OnAir");
     delete_entity("switch","None","VFlip");
     delete_entity("switch","None","HMirror");
-    delete_entity("sensor","None","Public_IP");
+    delete_entity("sensor","None","Local_IP");
 //    delete_entity("switch","switch","Switch");
 //    delete_entity("sensor","None","Timer");
 //    delete_trigger("Button_1");

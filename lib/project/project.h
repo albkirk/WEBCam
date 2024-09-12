@@ -9,6 +9,7 @@
 #include "esp_http_server.h"
 #include "sys/socket.h"
 #include "microphone.h"
+#include "EasyDDNS.h"
 
 // **** Project code definition here ...
 // Camera PINs
@@ -47,6 +48,7 @@ static bool OnAir =      false;         // OnAir switch
 static bool OnAir_Last = false;         // OnAir switch  (Last state)
 static bool Stream_VIDEO=false;         // Streaming Video
 static bool Stream_AUDIO=false;         // Streaming Audio
+static bool IMG_Capture =false;         // Capturing Image (JPEG or BMP)
 
 
 // HTTP pre-defined strings
@@ -112,13 +114,16 @@ static esp_err_t video_stream_handler(httpd_req_t *req){
   else if (getRSSI()<-75) current_FR = int(Framerate / 2);
   else current_FR = Framerate;
 
+
+  telnet_print("NEW HTTP GET request for VIDEO Stream from ");
+  print_client_ip(req);  
+
+
+  // Set the response type header
   res = httpd_resp_set_type(req, _STREAM_PART);
   if(res != ESP_OK){
     return res;
   }
-
-  telnet_print("NEW HTTP GET request for VIDEO Stream from ");
-  print_client_ip(req);
 
   // Set "no-cache" on Cache-Control header
   res = httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
@@ -141,33 +146,44 @@ static esp_err_t video_stream_handler(httpd_req_t *req){
   while(OnAir){
     if (micros() - Last_fb_capture < 1000000/current_FR) delayMicroseconds(1000000/current_FR - (micros() - Last_fb_capture) - 10);
     else telnet_println("FrameRate: " + String(current_FR) + " - Late Camera capture: " + String(micros() - Last_fb_capture));
-    fb = esp_camera_fb_get();
-    Last_fb_capture = micros();
-    if (!fb) {
-      telnet_println("Camera capture failed!");
-      esp_camera_return_all();
-      fb = NULL;
-      if(_jpg_buf) free(_jpg_buf);
-      _jpg_buf = NULL;
-      OnAir_Last = false;         // force to init the Camera  
-      res = ESP_ERR_INVALID_RESPONSE;
-    } else {
-      res = ESP_OK;
-      if(fb->width > 400){
-        if(fb->format != PIXFORMAT_JPEG){
-            bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-            esp_camera_fb_return(fb);
+    if (!IMG_Capture) {
+        fb = esp_camera_fb_get();
+        Last_fb_capture = micros();
+        if (!fb) {
+            telnet_println("Camera capture failed!");
+            res = ESP_ERR_INVALID_RESPONSE;
+            // shutting down the camera and reseting variables
+            esp_camera_return_all();
+            esp_camera_deinit();
+            cam_sensor->reset(cam_sensor);
             fb = NULL;
-            if(!jpeg_converted){
-                telnet_println("JPEG compression failed");
-                res = ESP_ERR_INVALID_RESPONSE;
-            }
-        } else {
-            _jpg_buf_len = fb->len;
-            _jpg_buf = fb->buf;
+            if(_jpg_buf) free(_jpg_buf);
+            _jpg_buf = NULL;
+            // restarting the camera
+            esp_camera_init(&cam_config);
+            cam_sensor = esp_camera_sensor_get();
+            cam_sensor->set_vflip(cam_sensor, VFlip ? 1 : 0);
+            cam_sensor->set_hmirror(cam_sensor, HMirror ? 1 : 0);
         }
-      }
+        else {
+            res = ESP_OK;
+            if(fb->width > 400){
+                if(fb->format != PIXFORMAT_JPEG){
+                    bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+                    esp_camera_fb_return(fb);
+                    fb = NULL;
+                    if(!jpeg_converted){
+                        telnet_println("JPEG compression failed");
+                        res = ESP_ERR_INVALID_RESPONSE;
+                    }
+                } else {
+                    _jpg_buf_len = fb->len;
+                    _jpg_buf = fb->buf;
+                }
+            }
+        }
     }
+    else res = ESP_ERR_INVALID_STATE;
     if(WIFI_state != WL_CONNECTED) res = ESP_ERR_WIFI_BASE; 
     if(res == ESP_OK){
       res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
@@ -191,29 +207,23 @@ static esp_err_t video_stream_handler(httpd_req_t *req){
 
     if (httpd_req_to_sockfd(req) == -1) {
       telnet_println("VIDEO client disconnected");
-      res = ESP_ERR_NOT_FINISHED;
+      res = ESP_ERR_TIMEOUT;
     }
 
-    if(res != ESP_OK ){
+    if(res != ESP_OK){
       telnet_println("VIDEO RES msg: " + String(esp_err_to_name(res)));
-      break;
-
+      if (res != ESP_ERR_INVALID_RESPONSE) break;
     }
-    //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
   }
   if(!OnAir) {
-    telnet_println("Stop capturing video");
-    res = ESP_ERR_TIMEOUT;
-  }
-  if(!OnAir_Last) {
-    telnet_println("taking a break to cooldown...");
-    delay(250);
+    telnet_println("Someone requested to stop streaming video");
+    res = ESP_ERR_NOT_FINISHED;
   }
   esp_camera_return_all();
   fb = NULL;
-  telnet_println("Finish VIDEO Stream HTTP GET request");
+  telnet_println("Finish VIDEO HTTP Stream request");
   Stream_VIDEO = false;
-  if(!Stream_AUDIO) CPU_Boost(false);
+  if(!Stream_AUDIO) CPU_Boost(false);  // set to false to release CPU
   return res;
 }
 
@@ -240,17 +250,19 @@ static esp_err_t capture_handler(httpd_req_t *req)
 {
     camera_fb_t *fb = NULL;
     esp_err_t res = ESP_OK;
+    IMG_Capture = true;
 
     telnet_print("NEW HTTP GET request for Camera CAPTURE from ");
     print_client_ip(req);
 
-    esp_camera_return_all();
-    for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
-        fb = esp_camera_fb_get();
-        esp_camera_fb_return(fb);
+   if (!Stream_VIDEO) {
+        esp_camera_return_all();
+        for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
+            fb = esp_camera_fb_get();
+            esp_camera_fb_return(fb);
+        }
+        fb = esp_camera_fb_get();         // so this captures the image at the moment you click
     }
-    fb = esp_camera_fb_get();         // so this captures the image at the moment you click
-
     if (!fb)
     {
         telnet_println("Camera capture failed - returning Error 500");
@@ -278,6 +290,7 @@ static esp_err_t capture_handler(httpd_req_t *req)
 
     esp_camera_fb_return(fb);
     esp_camera_return_all();
+    IMG_Capture = false;
     return res;
 }
 
@@ -285,14 +298,16 @@ static esp_err_t capture_handler(httpd_req_t *req)
 static esp_err_t bmp_handler(httpd_req_t *req) {
     camera_fb_t *fb = NULL;
     esp_err_t res = ESP_OK;
+    IMG_Capture = true;
 
-    esp_camera_return_all();
-    for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
-        fb = esp_camera_fb_get();
-        esp_camera_fb_return(fb);
+    if (!OnAir) {
+        esp_camera_return_all();
+        for (size_t i = 0; i < 2; i++) {  // Dummy loop to clean the buffer...                  
+            fb = esp_camera_fb_get();
+            esp_camera_fb_return(fb);
+        }
+        fb = esp_camera_fb_get();         // so this captures the image at the moment you click
     }
-    fb = esp_camera_fb_get();         // so this captures the image at the moment you click
-
     if (!fb)
     {
         //log_e("Camera capture failed");
@@ -321,6 +336,7 @@ static esp_err_t bmp_handler(httpd_req_t *req) {
     res = httpd_resp_send(req, (const char *)buf, buf_len);
     free(buf);
     esp_camera_return_all();
+    IMG_Capture = false;
     return res;
 }
 
@@ -328,10 +344,17 @@ static esp_err_t bmp_handler(httpd_req_t *req) {
 // Function to handle the AUDIO STREAM
 static esp_err_t audio_stream_handler(httpd_req_t *req){
   esp_err_t res = ESP_OK;
-  Stream_AUDIO = true;
   CPU_Boost(true);
  
   telnet_println("NEW HTTP GET request for AUDIO Stream");
+
+  if (Stream_AUDIO) {
+      telnet_println("Another AUDIO stream instance already in place.");
+      httpd_resp_send_500(req);
+      return ESP_ERR_NOT_SUPPORTED;
+  }
+
+  Stream_AUDIO = true;
 
   // Initialize the I2S microphone
   mic_i2s_init();
@@ -407,20 +430,20 @@ static esp_err_t audio_stream_handler(httpd_req_t *req){
   i2s_driver_uninstall(I2S_PORT);
   telnet_println("Finish HTTP GET request AUDIO Stream. Total bytes sent: " + String(totalDataSize));
   Stream_AUDIO = false;
-  if(!Stream_VIDEO) CPU_Boost(false);
+  if(!Stream_VIDEO) CPU_Boost(false);  // set to false to release CPU
   return res;
 }
 
 
 esp_err_t startCameraServer(){
   esp_err_t start_res;
-  httpd_config_t cam_config = HTTPD_DEFAULT_CONFIG();
-  cam_config.server_port = 2180;
-  cam_config.lru_purge_enable=true;
-  cam_config.max_open_sockets=3;
-  cam_config.backlog_conn=0;
-  cam_config.recv_wait_timeout=4;
-  cam_config.send_wait_timeout=4;
+  httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
+  http_config.server_port = 2180;
+  //http_config.lru_purge_enable=true;
+  http_config.max_open_sockets=1;
+  http_config.backlog_conn=0;
+  //http_config.recv_wait_timeout=1;
+  //http_config.send_wait_timeout=1;
   
 
   // URI handler for video stream
@@ -433,7 +456,7 @@ esp_err_t startCameraServer(){
 
 
   httpd_uri_t capture_uri = {
-    .uri       = "/capture",
+    .uri       = "/capture.jpg",
     .method    = HTTP_GET,
     .handler   = capture_handler,
     .user_ctx  = NULL
@@ -457,17 +480,17 @@ esp_err_t startCameraServer(){
   };
 */
 
-  //Serial.printf("Starting web server on port: '%d'\n", cam_config.server_port);
-  start_res = httpd_start(&camera_httpd, &cam_config);
+  //Serial.printf("Starting web server on port: '%d'\n", http_config.server_port);
+  start_res = httpd_start(&camera_httpd, &http_config);
   if ( start_res == ESP_OK) {
       httpd_register_uri_handler(camera_httpd, &video_uri);
       httpd_register_uri_handler(camera_httpd, &capture_uri);
       httpd_register_uri_handler(camera_httpd, &bmp_uri);
-      telnet_println("VIDEO Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(video_uri.uri));
-      telnet_println("Camera CAPTURE Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(capture_uri.uri));
-      telnet_println("BMP capture Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(bmp_uri.uri));
+      telnet_println("VIDEO Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(http_config.server_port) + String(video_uri.uri));
+      telnet_println("Camera CAPTURE Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(http_config.server_port) + String(capture_uri.uri));
+      telnet_println("BMP capture Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(http_config.server_port) + String(bmp_uri.uri));
       //httpd_register_uri_handler(camera_httpd, &audio_uri);
-      //telnet_println("Audio Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(audio_uri.uri));
+      //telnet_println("Audio Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(http_config.server_port) + String(audio_uri.uri));
 
   }
   return start_res;
@@ -477,14 +500,14 @@ esp_err_t startCameraServer(){
 
 esp_err_t startAudioServer(){
     esp_err_t start_res;
-    httpd_config_t cam_config = HTTPD_DEFAULT_CONFIG();
-    cam_config.server_port = 2181; // Set the desired port number
-    cam_config.ctrl_port += 10;
-    cam_config.lru_purge_enable=true;
-    cam_config.max_open_sockets=3;
-    cam_config.backlog_conn=0;
-    cam_config.recv_wait_timeout=1;
-    cam_config.send_wait_timeout=1;
+    httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
+    http_config.server_port = 2181; // Set the desired port number
+    http_config.ctrl_port += 10;
+    //http_config.lru_purge_enable=true;
+    http_config.max_open_sockets=1;
+    http_config.backlog_conn=0;
+    //http_config.recv_wait_timeout=1;
+    //http_config.send_wait_timeout=1;
 
     // URI handler for audio stream
     httpd_uri_t audio_uri = {
@@ -496,11 +519,11 @@ esp_err_t startAudioServer(){
 
 
 
-  //Serial.printf("Starting web server on port: '%d'\n", cam_config.server_port);
-  start_res = httpd_start(&microphone_httpd, &cam_config);
+  //Serial.printf("Starting web server on port: '%d'\n", http_config.server_port);
+  start_res = httpd_start(&microphone_httpd, &http_config);
   if ( start_res == ESP_OK) {
       httpd_register_uri_handler(microphone_httpd, &audio_uri);
-      telnet_println("MICROPHONE Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(cam_config.server_port) + String(audio_uri.uri));
+      telnet_println("MICROPHONE Stream Ready! Go to: http://" + WiFi.localIP().toString() + ":" + String(http_config.server_port) + String(audio_uri.uri));
   }
   return start_res;
 }
@@ -510,8 +533,11 @@ void project_setup() {
   // Disable brownout detector
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
 
-  // Use config.SLEEPTime values in seconds
-  SLEEPTime = config.SLEEPTime * 1UL;  
+  // Slow down the CPU to minimize power consumption
+  CPU_Boost(false);  // set to false to release CPU
+
+  // BT Radio shoud be OFF
+  telnet_println("BT radio: " + String(esp_bt_check()));
 
   // BIG White LED
   ledcSetup(CHANNELLED, PWM_FREQ, RESOLUTION);  // Duty cycle Range of values [o-PWMRANGE] equal to FF
@@ -519,6 +545,18 @@ void project_setup() {
   ledcAttachPin(Big_LED_Pin, CHANNELLED);
   ledcWrite(CHANNELLED, 0);
 
+  // Use config.SLEEPTime values in seconds
+  DateTime = ConvertTimeStamp(curUnixTime());
+  if(NTP_Sync && (DateTime.hour > 20 || DateTime.hour <  7) ) {
+      telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
+      SLEEPTime = 3600*1000;
+  }
+  else {
+      if(NTP_Sync) telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
+      SLEEPTime = config.SLEEPTime * 1UL;  
+  }
+
+  // Initialize the camera settings
   cam_config.ledc_channel = LEDC_CHANNEL_0;
   cam_config.ledc_timer = LEDC_TIMER_0;
   cam_config.pin_d0 = Y2_GPIO_NUM;
@@ -549,26 +587,67 @@ void project_setup() {
     telnet_println("--> psramFound ! <--");
     cam_config.frame_size = FRAMESIZE_VGA;  // original : FRAMESIZE_XGA
     cam_config.jpeg_quality = 10;
-    cam_config.fb_count = 1;
+    cam_config.fb_count = 2;
   } else {
     cam_config.frame_size = FRAMESIZE_SVGA;
     cam_config.jpeg_quality = 12;
     cam_config.fb_count = 1;
   }
   
-    // Get ESP32-Cam sensor configuration, such vflip and hmirror features
-    cam_sensor = esp_camera_sensor_get();
   
-  
-  // Start streaming web server
-  //startCameraServer();
-  telnet_println("BT radio: " + String(esp_bt_check()));
+  // Activate DDNS service
+    /*
+    List of supported DDNS providers:
+    - "duckdns"
+    - "noip"
+    - "dyndns"
+    - "dynu"
+    - "enom"
+    - "all-inkl"
+    - "selfhost.de"
+    - "dyndns.it"
+    - "strato"
+    - "freemyip"
+    - "afraid.org"
+  */
+  EasyDDNS.service("noip");
+  //EasyDDNS.client("camabrantes,hopto.org", "nralbuquerque", "NPegasop"); 
+  EasyDDNS.client("all.ddnskey.com", "5qwae6k", "AbJG3ejfnd5n"); 
 
-  // Slow down the CPU to minimize power consumption
-  CPU_Boost(false);
- 
+  // Get Notified when your IP changes
+  EasyDDNS.onUpdate([&](const char* oldIP, const char* newIP) {
+        telnet_println("EasyDDNS - IP Change Detected: " +  String(newIP));
+        //mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
+    }
+  );
+
+
+
+  // Start streaming web server
+  if (WIFI_state == WL_CONNECTED) {
+      // Camera initialization
+      esp_err_t err = esp_camera_init(&cam_config);
+      if (err != ESP_OK) {
+          telnet_println("Camera init failed with error: [" + String(err,HEX) + "] - " + String(esp_err_to_name(err)));
+          mqtt_publish(mqtt_pathtele, "Status", "CAM ERROR");
+          deepsleep_procedure();
+      }
+      else {
+          //mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
+          mqtt_publish(mqtt_pathtele, "Local_IP", WiFi.localIP().toString());
+          // Get ESP32-Cam sensor configuration, such vflip and hmirror features
+          cam_sensor = esp_camera_sensor_get();
+          cam_sensor->set_vflip(cam_sensor, VFlip ? 1 : 0);
+          cam_sensor->set_hmirror(cam_sensor, HMirror ? 1 : 0);
+          telnet_println("Configuring VFlip: " + String(VFlip) + " HMirror: " + String(HMirror));
+          // Start HTTP servers
+          startCameraServer();
+          startAudioServer();
+      }
+  }
 }
 
+ 
 void project_loop() {
   if(Light != Light_Last) {
       if(Light) ledcWrite(CHANNELLED, 255);
@@ -579,54 +658,30 @@ void project_loop() {
 
   if(OnAir != OnAir_Last) {
       if(OnAir) {
-          if (WIFI_state != WL_CONNECTED) return;     // do nothing until be connected. 
-          // Camera initialization
-          esp_camera_deinit();
-          esp_err_t err = esp_camera_init(&cam_config);
-          telnet_println("Configuring VFlip: " + String(VFlip) + " HMirror: " + String(HMirror));
-          cam_sensor = esp_camera_sensor_get();
-          cam_sensor->set_vflip(cam_sensor, VFlip ? 1 : 0);
-          cam_sensor->set_hmirror(cam_sensor, HMirror ? 1 : 0);
-          if (err != ESP_OK) {
-              //Serial.printf("Camera init failed with error 0x%x", err);
-              esp_camera_deinit();
-              cam_sensor->reset(cam_sensor);
-              delay(5000);
-              telnet_println("Camera init failed with error: [" + String(err,HEX) + "] - " + String(esp_err_to_name(err)));
-              if(err == ESP_ERR_NOT_FOUND) {
-                  mqtt_publish(mqtt_pathtele, "Status", "CAM ERROR");
-                  //OnAir = false;
-                  //config.DEEPSLEEP = true;
-              }
-              return;
-          };
-          config.DEEPSLEEP = false;
-          mqtt_publish(mqtt_pathtele, "Public_IP", public_ip());
-          if(camera_httpd == NULL) startCameraServer();
-          if(microphone_httpd == NULL) startAudioServer();
+        config.DEEPSLEEP = false;
       }
-      else {
-        telnet_println("Stopped CAMERA stream with error: " + String(httpd_stop(camera_httpd)) );
-        telnet_println("Stopped MICROPHONE stream with error: " + String(httpd_stop(microphone_httpd)));
-        camera_httpd = NULL;
-        microphone_httpd = NULL;
-        esp_camera_deinit();
+      else if(!IMG_Capture) {
         config.DEEPSLEEP = true;
+        Light = false;            // Turning light OFF
       }
-      Light = false;      // Turning light OFF, regardelss of OnAir status it's going to.
+      else return;
       mqtt_publish(mqtt_pathtele, "OnAir", String(OnAir));
       OnAir_Last = OnAir;
   }
 
-  /*  //Logic flow to save energy depending on "sun" / time of the day. 
+  /* //Logic flow to save energy depending on "sun" / time of the day. 
   if (NTP_Sync && millis() % 600000 < 5) {
       DateTime = ConvertTimeStamp(curUnixTime());
       if(DateTime.hour > 20 || DateTime.hour <  7) { if(!config.DEBUG)deepsleep_procedure(60); }  
       else telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
   }
   */
+  
   if (millis() > 1800000) {
       mqtt_publish(mqtt_pathcomd, "OnAir", "", true);
-      OnAir = false;   // Automatically disable OnAir after 30 minutes (to save battery).
+      OnAir = false;      // Automatically disable OnAir after 30 minutes (to save battery).
+      OnAir_Last = true;  // To force going through the OnAir logic flow.
   }
+  // Update DDNS every 900 seconds
+  EasyDDNS.update(900000);
 }

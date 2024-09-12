@@ -9,7 +9,7 @@
 // -- HARWARE & SOFTWARE Version --
 #define BRANDName           "AlBros_Team"                 // Hardware brand name
 #define MODELName           "WEBCam"                      // Hardware model name
-#define SWVer               "02.08"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
+#define SWVer               "04.06"                       // Major.Minor Software version (use String 01.00 - 99.99 format !)
 
 // -- Model Variants Definition --                        // Identify variants for acomodade small code changes 
 //#define ModelVariant                                    // Ex.: MoesHouse cover, Ambisense version,... 
@@ -107,17 +107,17 @@ void config_defaults() {
     strcpy(config.Location, "Home");                      // Device Location
     strcpy(config.ClientID, "001001");                    // Client ID (used on MQTT)
     config.ONTime = 10;                                   // 0-255 seconds (Byte range)
-    config.SLEEPTime = 1;                                 // 0-255 minutes (Byte range)
+    config.SLEEPTime = 30;                                // 0-255 minutes (Byte range)
     config.DEEPSLEEP = true;                              // 0 - Disabled, 1 - Enabled
-    config.LED = true;                                    // 0 - OFF, 1 - ON
+    config.LED = false;                                   // 0 - OFF, 1 - ON
     config.TELNET = true;                                 // 0 - Disabled, 1 - Enabled
     config.OTA = true;                                    // 0 - Disabled, 1 - Enabled
     config.WEB = false;                                   // 0 - Disabled, 1 - Enabled
     config.Remote_Allow = true;                           // 0 - Not Allow, 1 - Allow remote operation
     config.STAMode = true;                                // 0 - AP or AP+STA Mode, 1 - Station only Mode
-    config.APMode = false;                                 // 0 - AP Mode Disabled, 1 - AP Mode Enabled
-    strcpy(config.SSID, "WiFiCasaN");                     // Wireless LAN SSID (STA mode)
-    strcpy(config.WiFiKey, "12345678");                   // Wireless LAN Key (STA mode)
+    config.APMode = false;                                // 0 - AP Mode Disabled, 1 - AP Mode Enabled
+    strcpy(config.SSID, "NOS-B9FB");                      // Wireless LAN SSID (STA mode)
+    strcpy(config.WiFiKey, "WFV5PXV9");                   // Wireless LAN Key (STA mode)
     config.DHCP = true;                                   // 0 - Static IP, 1 - DHCP
     config.IP[0] = 192; config.IP[1] = 168; config.IP[2] = 1; config.IP[3] = 10;
     config.Netmask[0] = 255; config.Netmask[1] = 255; config.Netmask[2] = 255; config.Netmask[3] = 0;
