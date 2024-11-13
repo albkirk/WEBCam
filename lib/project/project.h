@@ -548,11 +548,11 @@ void project_setup() {
   // Use config.SLEEPTime values in seconds
   DateTime = ConvertTimeStamp(curUnixTime());
   if(NTP_Sync && (DateTime.hour > 20 || DateTime.hour <  7) ) {
-      telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
-      SLEEPTime = 3600*1000;
+      telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be sleeping...zZzz... ");
+      SLEEPTime = 3600 * 1UL;
   }
   else {
-      if(NTP_Sync) telnet_println("It's " +  String(DateTime.hour) + " hours. The sun should be high! : )");
+      if(NTP_Sync) telnet_println("It's " +  String(DateTime.hour) + " hours. The sun is high! : )");
       SLEEPTime = config.SLEEPTime * 1UL;  
   }
 
@@ -585,7 +585,7 @@ void project_setup() {
   //Check if the Board has PSRAM
   if(psramFound()){
     telnet_println("--> psramFound ! <--");
-    cam_config.frame_size = FRAMESIZE_VGA;  // original : FRAMESIZE_XGA
+    cam_config.frame_size = FRAMESIZE_SVGA;  // original : FRAMESIZE_XGA
     cam_config.jpeg_quality = 10;
     cam_config.fb_count = 2;
   } else {
